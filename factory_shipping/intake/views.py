@@ -460,6 +460,11 @@ def import_status():
         # 日付範囲の取得（デフォルトは過去30日）
         date_from_str = request.args.get('date_from', '').strip()
         date_to_str = request.args.get('date_to', '').strip()
+        sort_order = request.args.get('sort_order', 'desc').strip()  # 'asc' または 'desc'
+        
+        # sort_orderの検証
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'desc'
         
         if date_from_str:
             try:
@@ -490,6 +495,10 @@ def import_status():
                 'weekday': weekday_name
             })
             current_date += timedelta(days=1)
+
+        # 日付をソート順に応じてソート
+        # descの場合は降順（新しい日付が上）、ascの場合は昇順（古い日付が上）
+        date_list.sort(key=lambda x: x['date'], reverse=(sort_order == 'desc'))
         
         # 各日付×店舗の組み合わせでデータが存在するかを確認
         # クエリ: 店舗コードと日付ごとにデータが存在するか
@@ -545,7 +554,8 @@ def import_status():
             date_to_str=date_to_str,
             today=date.today(),
             total_cells=total_cells,
-            filled_cells=filled_cells
+            filled_cells=filled_cells,
+            sort_order=sort_order
         )
     except Exception as e:
         logger.error(f"入荷データ取得状況画面エラー: {e}", exc_info=True)

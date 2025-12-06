@@ -202,6 +202,15 @@ flask run --host=0.0.0.0 --port=5000
 
 ## 本番環境へのデプロイ
 
+### GitHubリポジトリ
+
+このプロジェクトはGitHubで管理されています：
+https://github.com/yoshinotaka/factory-intake-shipping
+
+### デプロイ方法
+
+#### 初回デプロイ
+
 ### 1. ログディレクトリの作成
 
 ```bash
@@ -278,6 +287,37 @@ sudo setsebool -P httpd_can_network_connect 1
 
 # または SELinux を一時的に無効化（開発環境のみ）
 sudo setenforce 0
+```
+
+---
+
+### コード更新時のデプロイ
+
+コードを変更した後は、以下のデプロイスクリプトを実行してください：
+
+```bash
+cd /var/www/html/factory-intake-shipping
+./deploy.sh
+```
+
+このスクリプトは以下を自動的に実行します：
+1. GitHubから最新のコードを取得（`git pull`）
+2. 依存関係の更新（requirements.txtが変更された場合）
+3. factory-shippingサービスの再起動
+4. サービスの状態確認
+5. エラーログの表示
+
+**重要**: コード変更後は必ずこのスクリプトを実行してください。実行しないと、古いコードが動作し続けます。
+
+#### 手動でのデプロイ
+
+スクリプトを使わない場合は、以下のコマンドを順番に実行してください：
+
+```bash
+cd /var/www/html/factory-intake-shipping
+git pull origin main
+sudo systemctl restart factory-shipping
+sudo systemctl status factory-shipping
 ```
 
 ---

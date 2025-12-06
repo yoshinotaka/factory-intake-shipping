@@ -20,6 +20,17 @@
     left: 0;
     z-index: 11;
     background-color: #212529;
+    white-space: nowrap;
+  }
+  .status-table .sort-buttons {
+    display: inline-block;
+    margin-left: 0.5rem;
+  }
+  .status-table .sort-buttons .btn {
+    padding: 0.125rem 0.375rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    min-width: 1.5rem;
   }
   .status-table td:first-child {
     position: sticky;
@@ -29,10 +40,8 @@
     font-weight: bold;
   }
   .status-table .has-data {
-    background-color: #d4edda;
     text-align: center;
     font-weight: bold;
-    color: #155724;
   }
   .status-table .no-data {
     background-color: #f8d7da;
@@ -63,29 +72,41 @@
   </div>
 </div>
 
-<!-- 日付範囲フィルタ -->
-<div class="row">
+<!-- 日付範囲フィルタ（折り畳み可能） -->
+<div class="row mb-3">
   <div class="col-12">
-    <div class="date-filter-section">
-      <h5>日付範囲指定</h5>
-      <form method="get" action="{{ url_for('intake.import_status') }}">
-        <div class="row g-2">
-          <div class="col-md-3">
-            <label for="date_from" class="form-label">開始日</label>
-            <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" 
-                   value="{{ date_from_str or date_from.strftime('%Y-%m-%d') }}">
-          </div>
-          <div class="col-md-3">
-            <label for="date_to" class="form-label">終了日</label>
-            <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" 
-                   value="{{ date_to_str or date_to.strftime('%Y-%m-%d') }}">
-          </div>
-          <div class="col-md-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary btn-sm">検索</button>
-            <a href="{{ url_for('intake.import_status') }}" class="btn btn-secondary btn-sm ms-2">リセット</a>
-          </div>
+    <div class="card">
+      <div class="card-header">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button" 
+                data-bs-toggle="collapse" data-bs-target="#dateFilterCollapse" aria-expanded="false" aria-controls="dateFilterCollapse">
+          <h5 class="mb-0">
+            <span id="dateFilterIcon">▶</span> 日付範囲指定
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="dateFilterCollapse">
+        <div class="card-body">
+          <form method="get" action="{{ url_for('intake.import_status') }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order }}">
+            <div class="row g-2">
+              <div class="col-md-3">
+                <label for="date_from" class="form-label">開始日</label>
+                <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" 
+                       value="{{ date_from_str or date_from.strftime('%Y-%m-%d') }}">
+              </div>
+              <div class="col-md-3">
+                <label for="date_to" class="form-label">終了日</label>
+                <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" 
+                       value="{{ date_to_str or date_to.strftime('%Y-%m-%d') }}">
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm">検索</button>
+                <a href="{{ url_for('intake.import_status') }}" class="btn btn-secondary btn-sm ms-2">リセット</a>
+              </div>
+            </div>
+          </form>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 </div>
@@ -95,14 +116,14 @@
   <div class="col-12">
     <div class="card">
       <div class="card-header">
-        <button class="btn btn-link text-white text-decoration-none p-0 w-100 text-start" type="button" 
-                data-bs-toggle="collapse" data-bs-target="#statsCollapse" aria-expanded="true" aria-controls="statsCollapse">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button" 
+                data-bs-toggle="collapse" data-bs-target="#statsCollapse" aria-expanded="false" aria-controls="statsCollapse">
           <h5 class="mb-0">
-            <span id="statsIcon">▼</span> 統計情報
+            <span id="statsIcon">▶</span> 統計情報
           </h5>
         </button>
       </div>
-      <div class="collapse show" id="statsCollapse">
+      <div class="collapse" id="statsCollapse">
         <div class="card-body">
           <div class="row">
             <div class="col-md-6">
@@ -126,8 +147,8 @@
   <div class="col-12">
     <div class="alert alert-info">
       <strong>凡例:</strong>
-      <span class="badge bg-success ms-2">〇</span> データ取得済み
-      <span class="badge bg-danger ms-2">未取得</span> データ未取得
+      <span class="ms-2">〇</span> データ取得済み
+      <span class="badge bg-danger ms-2">-</span> データ未取得
       <span class="badge bg-warning text-dark ms-2">今日</span> 今日の日付
     </div>
   </div>
@@ -140,7 +161,23 @@
       <table class="table table-bordered table-sm status-table">
         <thead class="table-dark">
           <tr>
-            <th>日付</th>
+            <th>
+              日付
+              <span class="sort-buttons">
+                {% set current_date_from = date_from_str or date_from.strftime('%Y-%m-%d') %}
+                {% set current_date_to = date_to_str or date_to.strftime('%Y-%m-%d') %}
+                <a href="{{ url_for('intake.import_status', date_from=current_date_from, date_to=current_date_to, sort_order='desc') }}" 
+                   class="btn btn-sm btn-outline-light {% if sort_order == 'desc' %}active{% endif %}" 
+                   title="降順（新しい日付から）">
+                  ↓
+                </a>
+                <a href="{{ url_for('intake.import_status', date_from=current_date_from, date_to=current_date_to, sort_order='asc') }}" 
+                   class="btn btn-sm btn-outline-light {% if sort_order == 'asc' %}active{% endif %}" 
+                   title="昇順（古い日付から）">
+                  ↑
+                </a>
+              </span>
+            </th>
             {% for store_code, store_name in target_stores %}
             <th title="{{ store_name }}">{{ store_code }}<br><small>{{ store_name }}</small></th>
             {% endfor %}
@@ -177,16 +214,30 @@
 <script>
   // 統計情報の折り畳みアイコンの切り替え
   document.addEventListener('DOMContentLoaded', function() {
-    const collapseElement = document.getElementById('statsCollapse');
-    const iconElement = document.getElementById('statsIcon');
+    const statsCollapseElement = document.getElementById('statsCollapse');
+    const statsIconElement = document.getElementById('statsIcon');
     
-    if (collapseElement && iconElement) {
-      collapseElement.addEventListener('show.bs.collapse', function() {
-        iconElement.textContent = '▼';
+    if (statsCollapseElement && statsIconElement) {
+      statsCollapseElement.addEventListener('show.bs.collapse', function() {
+        statsIconElement.textContent = '▼';
       });
       
-      collapseElement.addEventListener('hide.bs.collapse', function() {
-        iconElement.textContent = '▶';
+      statsCollapseElement.addEventListener('hide.bs.collapse', function() {
+        statsIconElement.textContent = '▶';
+      });
+    }
+    
+    // 日付範囲フィルタの折り畳みアイコンの切り替え
+    const dateFilterCollapseElement = document.getElementById('dateFilterCollapse');
+    const dateFilterIconElement = document.getElementById('dateFilterIcon');
+    
+    if (dateFilterCollapseElement && dateFilterIconElement) {
+      dateFilterCollapseElement.addEventListener('show.bs.collapse', function() {
+        dateFilterIconElement.textContent = '▼';
+      });
+      
+      dateFilterCollapseElement.addEventListener('hide.bs.collapse', function() {
+        dateFilterIconElement.textContent = '▶';
       });
     }
   });
