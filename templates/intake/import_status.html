@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}入荷データ（売上台帳ログ）取得状況 - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .status-table {
+    font-size: 0.85rem;
+  }
+  .status-table thead th {
+    position: sticky;
+    top: 0;
+    background-color: #212529;
+    color: white;
+    z-index: 10;
+  }
+  .status-table thead th:first-child {
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 11;
+    background-color: #212529;
+  }
+  .status-table td:first-child {
+    position: sticky;
+    left: 0;
+    background-color: white;
+    z-index: 1;
+    font-weight: bold;
+  }
+  .status-table .has-data {
+    background-color: #d4edda;
+    text-align: center;
+    font-weight: bold;
+    color: #155724;
+  }
+  .status-table .no-data {
+    background-color: #f8d7da;
+    text-align: center;
+    color: #721c24;
+  }
+  .status-table .today {
+    background-color: #fff3cd;
+  }
+  .date-filter-section {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  .table-responsive {
+    max-height: 80vh;
+    overflow: auto;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h1>入荷データ（売上台帳ログ）取得状況</h1>
+    <p class="lead">各店舗の日別データ取得状況を確認できます</p>
+  </div>
+</div>
+
+<!-- 日付範囲フィルタ -->
+<div class="row">
+  <div class="col-12">
+    <div class="date-filter-section">
+      <h5>日付範囲指定</h5>
+      <form method="get" action="{{ url_for('intake.import_status') }}">
+        <div class="row g-2">
+          <div class="col-md-3">
+            <label for="date_from" class="form-label">開始日</label>
+            <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" 
+                   value="{{ date_from_str or date_from.strftime('%Y-%m-%d') }}">
+          </div>
+          <div class="col-md-3">
+            <label for="date_to" class="form-label">終了日</label>
+            <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" 
+                   value="{{ date_to_str or date_to.strftime('%Y-%m-%d') }}">
+          </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm">検索</button>
+            <a href="{{ url_for('intake.import_status') }}" class="btn btn-secondary btn-sm ms-2">リセット</a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 統計情報（折り畳み可能） -->
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <button class="btn btn-link text-white text-decoration-none p-0 w-100 text-start" type="button" 
+                data-bs-toggle="collapse" data-bs-target="#statsCollapse" aria-expanded="true" aria-controls="statsCollapse">
+          <h5 class="mb-0">
+            <span id="statsIcon">▼</span> 統計情報
+          </h5>
+        </button>
+      </div>
+      <div class="collapse show" id="statsCollapse">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <p><strong>対象期間:</strong> {{ date_from.strftime('%Y-%m-%d') }} ～ {{ date_to.strftime('%Y-%m-%d') }}</p>
+              <p><strong>対象日数:</strong> {{ date_list|length }} 日</p>
+              <p><strong>対象店舗数:</strong> {{ target_stores|length }} 店舗</p>
+            </div>
+            <div class="col-md-6">
+              <p><strong>取得済み:</strong> {{ filled_cells }} / {{ total_cells }} セル</p>
+              <p><strong>取得率:</strong> {{ "%.1f"|format((filled_cells / total_cells * 100) if total_cells > 0 else 0) }}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 凡例 -->
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="alert alert-info">
+      <strong>凡例:</strong>
+      <span class="badge bg-success ms-2">〇</span> データ取得済み
+      <span class="badge bg-danger ms-2">未取得</span> データ未取得
+      <span class="badge bg-warning text-dark ms-2">今日</span> 今日の日付
+    </div>
+  </div>
+</div>
+
+<!-- 取得状況テーブル -->
+<div class="row">
+  <div class="col-12">
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm status-table">
+        <thead class="table-dark">
+          <tr>
+            <th>日付</th>
+            {% for store_code, store_name in target_stores %}
+            <th title="{{ store_name }}">{{ store_code }}<br><small>{{ store_name }}</small></th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for date_item in date_list %}
+          {% set target_date = date_item.date %}
+          <tr>
+            <td class="{% if target_date == today %}today{% endif %}">
+              {{ target_date.strftime('%Y-%m-%d') }}<br>
+              <small>({{ date_item.weekday }})</small>
+            </td>
+            {% for store_code, store_name in target_stores %}
+            <td class="{% if target_date == today %}today{% endif %}">
+              {% if status_data.get(store_code, {}).get(target_date, False) %}
+                <span class="has-data">〇</span>
+              {% else %}
+                <span class="no-data">-</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // 統計情報の折り畳みアイコンの切り替え
+  document.addEventListener('DOMContentLoaded', function() {
+    const collapseElement = document.getElementById('statsCollapse');
+    const iconElement = document.getElementById('statsIcon');
+    
+    if (collapseElement && iconElement) {
+      collapseElement.addEventListener('show.bs.collapse', function() {
+        iconElement.textContent = '▼';
+      });
+      
+      collapseElement.addEventListener('hide.bs.collapse', function() {
+        iconElement.textContent = '▶';
+      });
+    }
+  });
+</script>
+{% endblock %}

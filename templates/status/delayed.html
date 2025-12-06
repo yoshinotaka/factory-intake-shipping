@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}遅延品管理 - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .store-selection-section {
+    background-color: #f8f9fa;
+    border: 2px solid #dc3545;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .store-radio-group {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 15px;
+    background-color: white;
+  }
+  .store-radio-item {
+    padding: 8px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .store-radio-item:hover {
+    background-color: #f8f9fa;
+  }
+  .store-radio-item input[type="radio"] {
+    cursor: pointer;
+    margin-right: 10px;
+  }
+  .table-sm td, .table-sm th {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .intake-status-badge {
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .intake-status-badge:hover {
+    opacity: 0.8;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h1>遅れ品管理</h1>
+    <p class="lead">未入荷商品を「遅れ品」ステータスに変更して工場に請求</p>
+  </div>
+</div>
+
+<!-- 店舗選択セクション -->
+<div class="row">
+  <div class="col-12">
+    <div class="store-selection-section">
+      <h4><i class="bi bi-shop"></i> 店舗選択</h4>
+      <p class="text-muted mb-3">店舗を選択すると、選択した店舗の遅延品のみが表示されます</p>
+
+      <div class="store-radio-group">
+        <div class="store-radio-item">
+          <label class="w-100">
+            <input type="radio" name="store_filter" value="" {% if not selected_store %}checked{% endif %} onchange="filterByStore()">
+            <strong>全店舗表示</strong>
+          </label>
+        </div>
+        {% for store in stores %}
+        <div class="store-radio-item">
+          <label class="w-100">
+            <input type="radio" name="store_filter" value="{{ store.store_code }}"
+                   {% if selected_store == store.store_code %}checked{% endif %}
+                   onchange="filterByStore()">
+            {{ store.store_code }} - {{ store.store_name }}
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 統計情報 -->
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="alert alert-info">
+      <strong>未入荷商品数:</strong> {{ items|length }} 件
+      {% if selected_store %}
+      （店舗: {{ selected_store }}）
+      {% endif %}
+      <br>
+      <small class="text-muted">※ 入荷状態が「通常」の商品をクリックして「遅れ品」ステータスに変更できます</small>
+    </div>
+  </div>
+</div>
+
+<!-- データテーブル -->
+<div class="row">
+  <div class="col-12">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>店舗コード</th>
+            <th>店舗名</th>
+            <th>預かり日</th>
+            <th>タグ番号</th>
+            <th>商品名</th>
+            <th>顧客名</th>
+            <th>金額</th>
+            <th>入荷状態</th>
+          </tr>
+        </thead>
+        <tbody id="delayed-items-tbody">
+          {% if items %}
+            {% for item in items %}
+            <tr data-store-code="{{ item.store_code }}">
+              <td>{{ item.store_code }}</td>
+              <td>{{ item.store_name or '-' }}</td>
+              <td>{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
+              <td><strong>{{ item.tag_number }}</strong></td>
+              <td>{{ item.product_name or '-' }}</td>
+              <td>{{ item.customer_name or '-' }}</td>
+              <td>{{ '¥{:,}'.format(item.amount) if item.amount else '-' }}</td>
+              <td>
+                {% if item.intake_status == '遅れ品' %}
+                  <span class="badge bg-danger intake-status-badge"
+                        data-item-id="{{ item.id }}"
+                        data-status="{{ item.intake_status }}"
+                        title="入荷状態: {{ item.intake_status }}（工場請求対象）">
+                    {{ item.intake_status }}
+                  </span>
+                {% elif item.intake_status == '工場請求中' %}
+                  <span class="badge bg-info intake-status-badge"
+                        data-item-id="{{ item.id }}"
+                        data-status="{{ item.intake_status }}"
+                        title="入荷状態: {{ item.intake_status }}">
+                    {{ item.intake_status }}
+                  </span>
+                {% else %}
+                  <span class="badge bg-secondary intake-status-badge"
+                        data-item-id="{{ item.id }}"
+                        data-status="{{ item.intake_status }}"
+                        style="cursor: pointer;"
+                        title="クリックで「遅れ品」ステータスに変更"
+                        onclick="changeToDelayed(this)">
+                    {{ item.intake_status }}
+                  </span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted">未入荷商品はありません</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // 店舗フィルター機能
+  function filterByStore() {
+    const selectedStore = document.querySelector('input[name="store_filter"]:checked').value;
+    const url = new URL(window.location.href);
+
+    if (selectedStore) {
+      url.searchParams.set('store', selectedStore);
+    } else {
+      url.searchParams.delete('store');
+    }
+
+    window.location.href = url.toString();
+  }
+
+  // 遅れ品ステータスに変更
+  function changeToDelayed(element) {
+    const itemId = element.getAttribute('data-item-id');
+    const currentStatus = element.getAttribute('data-status');
+
+    // 確認ダイアログ
+    if (!confirm('この商品を「遅れ品」ステータスに変更しますか？\n工場に請求する対象として登録されます。')) {
+      return;
+    }
+
+    // ローディング表示
+    const originalText = element.textContent;
+    element.textContent = '処理中...';
+    element.style.opacity = '0.6';
+    element.style.pointerEvents = 'none';
+
+    // AJAXリクエスト
+    const url = `/fi/status/update-intake-status/${itemId}`;
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        status: '遅れ品'
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // バッジを更新
+        element.className = 'badge bg-danger intake-status-badge';
+        element.textContent = '遅れ品';
+        element.setAttribute('data-status', '遅れ品');
+        element.setAttribute('title', '入荷状態: 遅れ品（工場請求対象）');
+        element.onclick = null; // クリック無効化
+        element.style.cursor = 'default';
+
+        alert('「遅れ品」ステータスに変更しました');
+      } else {
+        alert('エラー: ' + data.message);
+        element.textContent = originalText;
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('エラーが発生しました。ページを再読み込みしてください。');
+      element.textContent = originalText;
+    })
+    .finally(() => {
+      element.style.opacity = '1';
+      element.style.pointerEvents = 'auto';
+    });
+  }
+</script>
+{% endblock %}

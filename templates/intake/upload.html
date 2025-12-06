@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}CSV アップロード - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <h1>CSV ファイルアップロード</h1>
+        <p class="lead">入荷データを含む CSV ファイルをアップロードします</p>
+
+        <div class="card">
+            <div class="card-header">
+                <h5>日付指定で取り込み</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('intake.upload') }}">
+                    <div class="mb-3">
+                        <label for="import_date" class="form-label">対象日付</label>
+                        <input type="date" class="form-control" id="import_date" name="import_date" required>
+                        <div class="form-text">
+                            /var/www/html/king-req/downloads_hanjow/ フォルダから指定日付のCSVファイルを自動的に取り込みます
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-download"></i> 日付指定で取り込み
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>ファイル選択</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" action="{{ url_for('intake.upload') }}">
+                    <div class="mb-3">
+                        <label for="csv_file" class="form-label">CSV ファイル</label>
+                        <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv">
+                        <div class="form-text">
+                            対応形式: CSV ファイル（UTF-8、Shift-JIS、CP932、EUC-JP、ISO-2022-JP、Latin-1、Windows-1252に対応）
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-upload"></i> ファイルをアップロード
+                        </button>
+                        <a href="{{ url_for('intake.index') }}" class="btn btn-secondary">キャンセル</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>CSV ファイル形式</h5>
+            </div>
+            <div class="card-body">
+                <p>CSV ファイルには以下の列を含める必要があります：</p>
+                <ul>
+                    <li><strong>店舗コード</strong> (必須) - 店舗を識別するコード</li>
+                    <li><strong>店舗名</strong> (任意) - 店舗名</li>
+                    <li><strong>タグ番号</strong> (必須) - タグ番号</li>
+                    <li><strong>預かり日</strong> (必須) - 預かり日（YYYY-MM-DD 形式）</li>
+                    <li><strong>顧客名</strong> (任意) - 顧客名</li>
+                    <li><strong>商品名</strong> (任意) - 商品名</li>
+                    <li><strong>金額</strong> (任意) - 金額</li>
+                </ul>
+                <p class="text-muted small">
+                    <strong>注意:</strong> ヘッダー行を含めてください。重複データ（店舗コード + 預かり日 + タグ番号の組み合わせ）は自動的にスキップされます。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

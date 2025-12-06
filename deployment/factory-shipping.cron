@@ -1,0 +1,22 @@
+# ========================================
+# 新・出荷システム - システムcron設定
+# ========================================
+#
+# インストール方法:
+#   sudo cp /var/www/html/factory-intake-shipping/deployment/factory-shipping.cron /etc/cron.d/factory-shipping
+#   sudo chmod 644 /etc/cron.d/factory-shipping
+#   sudo chown root:root /etc/cron.d/factory-shipping
+#
+# アンインストール方法:
+#   sudo rm /etc/cron.d/factory-shipping
+#
+# ========================================
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# ========================================
+# hanjow CSV 自動取り込み
+# 毎日 22:35 実行 (CSVは22:30配置想定)
+# ========================================
+35 22 * * * ec2-user /var/www/html/factory-intake-shipping/scripts/auto_import_hanjow.sh >> /var/log/factory-shipping/auto-import.log 2>&1

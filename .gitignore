@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Flask
+instance/
+.webassets-cache
+
+# 環境変数
+.env
+.env.local
+.env.production
+
+# データベース
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ログ
+*.log
+logs/
+
+# アップロードファイル
+uploads/
+!uploads/.gitkeep
+
+# Alembic
+# migrations/versions/*.py は Git 管理対象とする場合が多い
+# プロジェクトの方針に応じて調整
+
+# Gunicorn
+gunicorn.sock
+*.pid
+
+# テスト
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 一時ファイル
+tmp/
+temp/
+*.tmp

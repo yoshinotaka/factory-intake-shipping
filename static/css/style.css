@@ -1,0 +1,54 @@
+/* 新・出荷システム - カスタムスタイル */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* カード */
+.card {
+    margin-bottom: 1rem;
+}
+
+/* テーブル */
+.table {
+    margin-bottom: 0;
+}
+
+/* フラッシュメッセージ */
+.alert {
+    margin-bottom: 1rem;
+}
+
+/* スキャン画面用 */
+.scan-input {
+    font-size: 1.5rem;
+    padding: 1rem;
+}
+
+.scan-result {
+    min-height: 200px;
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.scan-result.success {
+    border-color: #28a745;
+    background-color: #d4edda;
+}
+
+.scan-result.error {
+    border-color: #dc3545;
+    background-color: #f8d7da;
+}

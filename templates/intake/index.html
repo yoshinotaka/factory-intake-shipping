@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}入荷管理 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<h1>入荷管理</h1>
+<p class="lead">CSV ファイルから入荷データを取り込みます</p>
+
+<div class="mb-3">
+    <a href="{{ url_for('intake.upload') }}" class="btn btn-primary">CSV アップロード</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        入荷データ一覧
+    </div>
+    <div class="card-body">
+        <p class="text-muted">※ 実際のデータ表示は実装後に表示されます</p>
+    </div>
+</div>
+{% endblock %}

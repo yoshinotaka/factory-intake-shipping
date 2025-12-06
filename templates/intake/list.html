@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}入荷一覧 - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .barcode-scanner-section {
+    background-color: #f8f9fa;
+    border: 2px solid #007bff;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .barcode-input {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    border: 2px solid #007bff;
+  }
+  .search-section {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  .table-sm td, .table-sm th {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .shipped-row {
+    background-color: #e9ecef;
+    color: #6c757d;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h1>入荷一覧</h1>
+    <p class="lead">バーコードスキャンで出荷処理 / 預かり日が古い順に表示</p>
+  </div>
+</div>
+
+<!-- バーコードスキャナー -->
+<div class="row">
+  <div class="col-12">
+    <div class="barcode-scanner-section">
+      <h4><i class="bi bi-upc-scan"></i> バーコードスキャン</h4>
+      <form method="post" id="barcode-form">
+        <div class="input-group mb-3">
+          <span class="input-group-text">バーコード</span>
+          <input
+            type="text"
+            class="form-control barcode-input"
+            id="scanned_code"
+            name="scanned_code"
+            placeholder="9桁のバーコードを入力してEnter"
+            autofocus
+            autocomplete="off"
+            pattern="[0-9]{9}"
+            maxlength="9"
+          >
+          <button class="btn btn-primary" type="submit">出荷</button>
+        </div>
+        <small class="text-muted">
+          ※ HIDバーコードリーダーから9桁の数値を入力してください（例: 024642123）
+        </small>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 検索フォーム -->
+<div class="row">
+  <div class="col-12">
+    <div class="search-section">
+      <h5>絞り込み検索</h5>
+      <form method="get" action="{{ url_for('intake.list_items') }}">
+        <div class="row g-2">
+          <div class="col-md-2">
+            <label for="store_code" class="form-label">店舗</label>
+            <select class="form-select form-select-sm" id="store_code" name="store_code">
+              <option value="">全店舗</option>
+              {% for store in stores %}
+              <option value="{{ store.store_code }}" {% if search_params.store_code == store.store_code %}selected{% endif %}>
+                {{ store.store_code }} - {{ store.store_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label for="tag_number" class="form-label">タグ番号（開始）</label>
+            <input type="text" class="form-control form-control-sm" id="tag_number" name="tag_number"
+                   value="{{ search_params.tag_number }}" placeholder="0-000" maxlength="5">
+          </div>
+          <div class="col-md-2">
+            <label for="date_from" class="form-label">預かり日（From）</label>
+            <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" value="{{ search_params.date_from }}">
+          </div>
+          <div class="col-md-2">
+            <label for="date_to" class="form-label">預かり日（To）</label>
+            <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" value="{{ search_params.date_to }}">
+          </div>
+          <div class="col-md-2">
+            <label for="status" class="form-label">出荷状態</label>
+            <select class="form-select form-select-sm" id="status" name="status">
+              <option value="unshipped" {% if search_params.status == 'unshipped' %}selected{% endif %}>未出荷のみ</option>
+              <option value="all" {% if search_params.status == 'all' %}selected{% endif %}>全て</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label for="per_page" class="form-label">表示件数</label>
+            <select class="form-select form-select-sm" id="per_page" name="per_page">
+              <option value="25" {% if search_params.per_page == 25 %}selected{% endif %}>25件</option>
+              <option value="50" {% if search_params.per_page == 50 %}selected{% endif %}>50件</option>
+              <option value="100" {% if search_params.per_page == 100 %}selected{% endif %}>100件</option>
+              <option value="200" {% if search_params.per_page == 200 %}selected{% endif %}>200件</option>
+            </select>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm w-100">検索</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ページネーション情報 -->
+<div class="row mb-2">
+  <div class="col-12">
+    <p class="text-muted">
+      全 {{ pagination.total }} 件中 {{ pagination.page }} / {{ pagination.pages }} ページ目
+      （{{ (pagination.page - 1) * pagination.per_page + 1 }}〜{{ min(pagination.page * pagination.per_page, pagination.total) }} 件表示）
+    </p>
+  </div>
+</div>
+
+<!-- データテーブル -->
+<div class="row">
+  <div class="col-12">
+    <div class="table-responsive">
+      <table class="table table-sm table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>店舗コード</th>
+            <th>預かり日</th>
+            <th>タグ番号</th>
+            <th>商品名</th>
+            <th>出荷状態</th>
+            <th>出荷日時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if items %}
+            {% for item in items %}
+            <tr class="{% if item.is_shipped %}shipped-row{% endif %}">
+              <td>{{ item.store_code }}</td>
+              <td>{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
+              <td><strong>{{ item.get_formatted_tag_number() }}</strong></td>
+              <td>{{ item.product_name or '-' }}</td>
+              <td>
+                {% if item.is_shipped %}
+                  <span class="badge bg-secondary shipment-badge" 
+                        data-item-id="{{ item.id }}" 
+                        data-is-shipped="true"
+                        style="cursor: pointer;"
+                        title="クリックで未出荷に戻す">
+                    出荷済み
+                  </span>
+                {% else %}
+                  <span class="badge bg-warning text-dark shipment-badge" 
+                        data-item-id="{{ item.id }}" 
+                        data-is-shipped="false"
+                        style="cursor: pointer;"
+                        title="クリックで出荷済みにする">
+                    未出荷
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.shipped_at %}
+                  {{ item.shipped_at.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted">データがありません</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ページネーション -->
+{% if pagination.pages > 1 %}
+<div class="row">
+  <div class="col-12">
+    <nav aria-label="ページネーション">
+      <ul class="pagination justify-content-center">
+        <!-- 前へ -->
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+          {% if pagination.has_prev %}
+          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.prev_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+            前へ
+          </a>
+          {% else %}
+          <span class="page-link">前へ</span>
+          {% endif %}
+        </li>
+
+        <!-- ページ番号 -->
+        {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+          {% if page_num %}
+            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+              <a class="page-link" href="{{ url_for('intake.list_items', page=page_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+                {{ page_num }}
+              </a>
+            </li>
+          {% else %}
+            <li class="page-item disabled">
+              <span class="page-link">...</span>
+            </li>
+          {% endif %}
+        {% endfor %}
+
+        <!-- 次へ -->
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+          {% if pagination.has_next %}
+          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.next_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+            次へ
+          </a>
+          {% else %}
+          <span class="page-link">次へ</span>
+          {% endif %}
+        </li>
+      </ul>
+    </nav>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // バーコード入力後、自動的にフォーカスを戻す
+  document.getElementById('barcode-form').addEventListener('submit', function() {
+    // フォーム送信後、少し待ってから入力欄をクリア＆フォーカス
+    setTimeout(function() {
+      const input = document.getElementById('scanned_code');
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }, 100);
+  });
+
+  // ページロード時にバーコード入力欄にフォーカス
+  window.addEventListener('load', function() {
+    const input = document.getElementById('scanned_code');
+    if (input) {
+      input.focus();
+    }
+  });
+
+  // タグ番号の自動フォーマット（0-000形式）
+  document.addEventListener('DOMContentLoaded', function() {
+    const tagNumberInput = document.getElementById('tag_number');
+    if (tagNumberInput) {
+      tagNumberInput.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/[^0-9]/g, ''); // 数字のみ抽出
+
+        if (value.length > 4) {
+          value = value.substring(0, 4); // 最大4桁に制限
+        }
+
+        if (value.length > 1) {
+          // 2桁目以降がある場合、0-000形式にフォーマット
+          value = value.charAt(0) + '-' + value.substring(1);
+        }
+
+        e.target.value = value;
+      });
+
+      // ペースト時の処理
+      tagNumberInput.addEventListener('paste', function(e) {
+        e.preventDefault();
+        let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        let value = pastedText.replace(/[^0-9]/g, ''); // 数字のみ抽出
+
+        if (value.length > 4) {
+          value = value.substring(0, 4);
+        }
+
+        if (value.length > 1) {
+          value = value.charAt(0) + '-' + value.substring(1);
+        }
+
+        e.target.value = value;
+      });
+    }
+  });
+
+  // 出荷状態のトグル（クリックで変更、確認ダイアログなし）
+  document.addEventListener('DOMContentLoaded', function() {
+    const badges = document.querySelectorAll('.shipment-badge');
+    badges.forEach(function(badge) {
+      badge.addEventListener('click', function() {
+        const itemId = this.getAttribute('data-item-id');
+        const isShipped = this.getAttribute('data-is-shipped') === 'true';
+        
+        // ローディング表示
+        const originalText = this.textContent;
+        this.textContent = '処理中...';
+        this.style.opacity = '0.6';
+        this.style.pointerEvents = 'none';
+        
+        // AJAXリクエスト
+        const url = `/fi/intake/toggle-shipment/${itemId}`;
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // バッジを更新
+            if (data.is_shipped) {
+              this.className = 'badge bg-secondary shipment-badge';
+              this.textContent = '出荷済み';
+              this.setAttribute('data-is-shipped', 'true');
+              this.setAttribute('title', 'クリックで未出荷に戻す');
+              // 行のスタイルを更新
+              this.closest('tr').classList.add('shipped-row');
+            } else {
+              this.className = 'badge bg-warning text-dark shipment-badge';
+              this.textContent = '未出荷';
+              this.setAttribute('data-is-shipped', 'false');
+              this.setAttribute('title', 'クリックで出荷済みにする');
+              // 行のスタイルを更新
+              this.closest('tr').classList.remove('shipped-row');
+            }
+            
+            // 出荷日時を更新
+            const shippedAtCell = this.closest('tr').querySelector('td:last-child');
+            if (shippedAtCell) {
+              shippedAtCell.textContent = data.shipped_at || '-';
+            }
+          } else {
+            alert('エラー: ' + data.message);
+            this.textContent = originalText;
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('エラーが発生しました。ページを再読み込みしてください。');
+          this.textContent = originalText;
+        })
+        .finally(() => {
+          this.style.opacity = '1';
+          this.style.pointerEvents = 'auto';
+        });
+      });
+    });
+  });
+</script>
+{% endblock %}

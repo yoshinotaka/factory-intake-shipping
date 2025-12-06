@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}出荷スキャン - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <h1 class="mb-4">出荷スキャン</h1>
+
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">バーコードスキャン</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="scanInput" class="form-label">バーコード入力</label>
+                    <input type="text" class="form-control form-control-lg" id="scanInput"
+                           placeholder="バーコードをスキャンしてください" autofocus>
+                    <div class="form-text">バーコードスキャナーでスキャンするか、手動で入力してEnterキーを押してください</div>
+                </div>
+
+                <div id="resultArea"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">スキャン履歴</h5>
+            </div>
+            <div class="card-body">
+                <div id="scanHistory" class="list-group">
+                    <p class="text-muted">スキャン履歴はここに表示されます</p>
+                </div>
+                <div class="mt-3">
+                    <a href="{{ url_for('shipping.history') }}" class="btn btn-secondary">全履歴を見る</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const scanInput = document.getElementById('scanInput');
+    const resultArea = document.getElementById('resultArea');
+    const scanHistory = document.getElementById('scanHistory');
+
+    let historyItems = [];
+
+    scanInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const code = scanInput.value.trim();
+            if (code) {
+                processScan(code);
+                scanInput.value = '';
+            }
+        }
+    });
+
+    function processScan(code) {
+        // Show loading
+        showResult('info', 'スキャン中...', true);
+
+        fetch('{{ url_for("shipping.scan") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code: code })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showResult('success',
+                    `出荷完了: ${data.item.name} (${data.item.code})<br>店舗: ${data.item.store}`
+                );
+                addToHistory(code, data.item, true);
+            } else {
+                showResult('danger', data.error || 'エラーが発生しました');
+                addToHistory(code, null, false);
+            }
+        })
+        .catch(error => {
+            showResult('danger', '通信エラーが発生しました');
+            addToHistory(code, null, false);
+        });
+    }
+
+    function showResult(type, message, loading = false) {
+        const icon = loading ? '<span class="spinner-border spinner-border-sm me-2"></span>' :
+                     type === 'success' ? '✓ ' : '✗ ';
+        resultArea.innerHTML = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${icon}${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+    }
+
+    function addToHistory(code, item, success) {
+        const timestamp = new Date().toLocaleString('ja-JP');
+        const historyItem = {
+            code: code,
+            item: item,
+            success: success,
+            timestamp: timestamp
+        };
+
+        historyItems.unshift(historyItem);
+        if (historyItems.length > 10) {
+            historyItems.pop();
+        }
+
+        updateHistoryDisplay();
+    }
+
+    function updateHistoryDisplay() {
+        if (historyItems.length === 0) {
+            scanHistory.innerHTML = '<p class="text-muted">スキャン履歴はここに表示されます</p>';
+            return;
+        }
+
+        scanHistory.innerHTML = historyItems.map(item => {
+            const statusClass = item.success ? 'success' : 'danger';
+            const statusIcon = item.success ? '✓' : '✗';
+            const itemInfo = item.item ?
+                `${item.item.name} - ${item.item.store}` :
+                '該当なし';
+
+            return `
+                <div class="list-group-item list-group-item-${statusClass}">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${statusIcon} ${item.code}</h6>
+                        <small>${item.timestamp}</small>
+                    </div>
+                    <p class="mb-1">${itemInfo}</p>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Auto-focus on input
+    setInterval(() => {
+        if (document.activeElement !== scanInput) {
+            scanInput.focus();
+        }
+    }, 1000);
+});
+</script>
+{% endblock %}

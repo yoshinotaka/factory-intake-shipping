@@ -1,0 +1,40 @@
+[Unit]
+Description=Factory Shipping System - Gunicorn WSGI Server
+After=network.target
+
+[Service]
+Type=notify
+# ユーザーとグループを指定（環境に合わせて変更）
+User=ec2-user
+Group=ec2-user
+
+# プロジェクトルート
+WorkingDirectory=/var/www/html/factory-intake-shipping
+
+# 環境変数ファイルを読み込み
+EnvironmentFile=/var/www/html/factory-intake-shipping/.env
+
+# Gunicorn 起動コマンド
+ExecStart=/var/www/html/factory-intake-shipping/venv/bin/gunicorn \
+    --workers ${GUNICORN_WORKERS:-4} \
+    --bind ${GUNICORN_BIND:-unix:/var/www/html/factory-intake-shipping/gunicorn.sock} \
+    --timeout ${GUNICORN_TIMEOUT:-120} \
+    --access-logfile /var/log/factory-shipping/access.log \
+    --error-logfile /var/log/factory-shipping/error.log \
+    --log-level info \
+    'factory_shipping:create_app()'
+
+# プロセス再起動設定
+Restart=on-failure
+RestartSec=5
+
+# セキュリティ設定
+PrivateTmp=true
+NoNewPrivileges=true
+
+# タイムアウト設定
+TimeoutStartSec=0
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

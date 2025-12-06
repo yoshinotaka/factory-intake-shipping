@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}404 - ページが見つかりません{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 text-center">
+        <h1 class="display-1">404</h1>
+        <p class="lead">お探しのページが見つかりません</p>
+        <a href="{{ url_for('main.index') }}" class="btn btn-primary">ホームに戻る</a>
+    </div>
+</div>
+{% endblock %}
