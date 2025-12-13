@@ -70,6 +70,8 @@ def list_items():
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     status = request.args.get('status', 'all')  # unshipped, all
+    sort_by = request.args.get('sort_by', 'intake_date')  # intake_date, tag_number
+    sort_order = request.args.get('sort_order', 'asc')  # asc, desc
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
 
@@ -116,11 +118,17 @@ def list_items():
         except ValueError:
             flash('日付（to）の形式が正しくありません', 'warning')
 
-    # 並び順: タグ番号が指定されている場合はタグ番号順、それ以外は預かり日順
-    if tag_number:
-        query = query.order_by(IntakeItem.tag_number.asc(), IntakeItem.id.asc())
-    else:
-        query = query.order_by(IntakeItem.intake_date.asc(), IntakeItem.id.asc())
+    # 並び順: sort_by と sort_order パラメータに基づいて並び替え
+    if sort_by == 'tag_number':
+        if sort_order == 'desc':
+            query = query.order_by(IntakeItem.tag_number.desc(), IntakeItem.id.desc())
+        else:
+            query = query.order_by(IntakeItem.tag_number.asc(), IntakeItem.id.asc())
+    else:  # デフォルトは intake_date
+        if sort_order == 'desc':
+            query = query.order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc())
+        else:
+            query = query.order_by(IntakeItem.intake_date.asc(), IntakeItem.id.asc())
 
     # ページネーション
     pagination = query.paginate(
@@ -144,6 +152,8 @@ def list_items():
             'date_from': date_from,
             'date_to': date_to,
             'status': status,
+            'sort_by': sort_by,
+            'sort_order': sort_order,
             'per_page': per_page
         }
     )

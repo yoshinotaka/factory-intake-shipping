@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_error_log %}
+        エラーログ - {{ job.name }} - {{ app_name }}
+    {% else %}
+        ログ - {{ job.name }} - {{ app_name }}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>
+            {% if is_error_log %}
+                エラーログ: {{ job.name }}
+            {% else %}
+                ログ: {{ job.name }}
+            {% endif %}
+        </h1>
+        <a href="{{ url_for('monitoring.index') }}" class="btn btn-secondary">
+            ← 一覧に戻る
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>ファイルパス:</strong> {{ file_info.path }}
+                </div>
+                <div class="col-md-3">
+                    <strong>ファイルサイズ:</strong> {{ (file_info.size / 1024) | round(2) }} KB
+                </div>
+                <div class="col-md-3">
+                    <strong>最終更新:</strong> 
+                    {% if file_info.last_modified %}
+                        {{ file_info.last_modified.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <small class="text-muted">
+                        表示行数: {{ file_info.displayed_lines }} / 全{{ file_info.total_lines }}行
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <pre class="log-content" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 600px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word;">{{ log_content|e }}</pre>
+        </div>
+    </div>
+</div>
+
+<style>
+    .log-content {
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        padding: 15px;
+        border-radius: 5px;
+        max-height: 600px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
+    @media (prefers-color-scheme: light) {
+        .log-content {
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+    }
+</style>
+{% endblock %}

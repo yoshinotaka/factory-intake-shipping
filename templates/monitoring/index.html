@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Cronジョブ監視 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Cronジョブ監視</h1>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">実行状況一覧</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ジョブ名</th>
+                                    <th>スケジュール</th>
+                                    <th>最終実行時刻</th>
+                                    <th>ステータス</th>
+                                    <th>ログファイル</th>
+                                    <th>エラーログ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in jobs %}
+                                <tr>
+                                    <td>{{ job.name }}</td>
+                                    <td>{{ job.schedule }}</td>
+                                    <td>
+                                        {% if job.last_run %}
+                                            {{ job.last_run.strftime('%Y-%m-%d %H:%M:%S') }}
+                                        {% else %}
+                                            <span class="text-muted">未実行</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.status == 'success' %}
+                                            <span class="badge bg-success">正常</span>
+                                        {% elif job.status == 'error' %}
+                                            <span class="badge bg-danger">エラー</span>
+                                        {% elif job.status == 'not_run' %}
+                                            <span class="badge bg-secondary">未実行</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">不明</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.log_size > 0 %}
+                                            <a href="{{ url_for('monitoring.view_log', job_index=loop.index0) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                ログを表示
+                                            </a>
+                                            <small class="text-muted d-block">
+                                                {{ (job.log_size / 1024) | round(2) }} KB
+                                            </small>
+                                        {% else %}
+                                            <span class="text-muted">ログなし</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.error_log_file and job.error_log_size > 0 %}
+                                            <a href="{{ url_for('monitoring.view_error_log', job_index=loop.index0) }}" 
+                                               class="btn btn-sm btn-outline-danger">
+                                                エラーログを表示
+                                            </a>
+                                            <small class="text-muted d-block">
+                                                {{ (job.error_log_size / 1024) | round(2) }} KB
+                                            </small>
+                                        {% elif job.has_error %}
+                                            <span class="text-danger">エラーあり</span>
+                                        {% else %}
+                                            <span class="text-muted">エラーなし</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th {
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}

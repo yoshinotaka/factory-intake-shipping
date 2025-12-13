@@ -142,14 +142,21 @@
   </div>
 </div>
 
-<!-- 凡例 -->
+<!-- 凡例とログ表示ボタン -->
 <div class="row mb-3">
   <div class="col-12">
-    <div class="alert alert-info">
-      <strong>凡例:</strong>
-      <span class="ms-2">〇</span> データ取得済み
-      <span class="badge bg-danger ms-2">-</span> データ未取得
-      <span class="badge bg-warning text-dark ms-2">今日</span> 今日の日付
+    <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap">
+      <div class="mb-2 mb-md-0">
+        <strong>凡例:</strong>
+        <span class="ms-2">〇</span> データ取得済み
+        <span class="badge bg-danger ms-2">-</span> データ未取得
+        <span class="badge bg-warning text-dark ms-2">今日</span> 今日の日付
+      </div>
+      <div>
+        <a href="https://factory.kingdrysystem.com/monitoring/logs/cron/hanjow_downloader.log" class="btn btn-sm btn-outline-primary me-2" target="_blank">
+          📥 ダウンロードログを表示
+        </a>
+      </div>
     </div>
   </div>
 </div>
@@ -243,3 +250,7 @@
   });
 </script>
 {% endblock %}
+
+
+
+

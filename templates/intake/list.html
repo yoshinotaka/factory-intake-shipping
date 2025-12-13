@@ -31,6 +31,23 @@
     background-color: #e9ecef;
     color: #6c757d;
   }
+  .sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px !important;
+  }
+  .sortable-header:hover {
+    background-color: #495057 !important;
+  }
+  .sort-icon {
+    position: absolute;
+    right: 5px;
+    opacity: 0.5;
+  }
+  .sort-icon.active {
+    opacity: 1;
+  }
 </style>
 {% endblock %}
 
@@ -38,7 +55,7 @@
 <div class="row">
   <div class="col-12">
     <h1>入荷一覧</h1>
-    <p class="lead">バーコードスキャンで出荷処理 / 預かり日が古い順に表示</p>
+    <p class="lead">バーコードスキャンで出荷処理 / テーブルヘッダーをクリックでソート可能</p>
   </div>
 </div>
 
@@ -145,8 +162,30 @@
         <thead class="table-dark">
           <tr>
             <th>店舗コード</th>
-            <th>預かり日</th>
-            <th>タグ番号</th>
+            <th class="sortable-header" onclick="toggleSort('intake_date')">
+              預かり日
+              {% if search_params.sort_by == 'intake_date' %}
+                {% if search_params.sort_order == 'asc' %}
+                  <span class="sort-icon active">▲</span>
+                {% else %}
+                  <span class="sort-icon active">▼</span>
+                {% endif %}
+              {% else %}
+                <span class="sort-icon">⇅</span>
+              {% endif %}
+            </th>
+            <th class="sortable-header" onclick="toggleSort('tag_number')">
+              タグ番号
+              {% if search_params.sort_by == 'tag_number' %}
+                {% if search_params.sort_order == 'asc' %}
+                  <span class="sort-icon active">▲</span>
+                {% else %}
+                  <span class="sort-icon active">▼</span>
+                {% endif %}
+              {% else %}
+                <span class="sort-icon">⇅</span>
+              {% endif %}
+            </th>
             <th>商品名</th>
             <th>出荷状態</th>
             <th>出荷日時</th>
@@ -208,7 +247,7 @@
         <!-- 前へ -->
         <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
           {% if pagination.has_prev %}
-          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.prev_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.prev_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
             前へ
           </a>
           {% else %}
@@ -220,7 +259,7 @@
         {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
           {% if page_num %}
             <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-              <a class="page-link" href="{{ url_for('intake.list_items', page=page_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+              <a class="page-link" href="{{ url_for('intake.list_items', page=page_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
                 {{ page_num }}
               </a>
             </li>
@@ -234,7 +273,7 @@
         <!-- 次へ -->
         <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
           {% if pagination.has_next %}
-          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.next_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, per_page=search_params.per_page) }}">
+          <a class="page-link" href="{{ url_for('intake.list_items', page=pagination.next_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
             次へ
           </a>
           {% else %}
@@ -251,6 +290,28 @@
 
 {% block extra_js %}
 <script>
+  // ソート切り替え関数
+  function toggleSort(column) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentSortBy = urlParams.get('sort_by') || 'intake_date';
+    const currentSortOrder = urlParams.get('sort_order') || 'asc';
+
+    // 同じカラムをクリックした場合は昇順/降順を切り替え
+    // 違うカラムをクリックした場合は昇順から開始
+    if (currentSortBy === column) {
+      urlParams.set('sort_order', currentSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      urlParams.set('sort_by', column);
+      urlParams.set('sort_order', 'asc');
+    }
+
+    // ページ番号を1にリセット
+    urlParams.set('page', '1');
+
+    // ページ遷移
+    window.location.search = urlParams.toString();
+  }
+
   // バーコード入力後、自動的にフォーカスを戻す
   document.getElementById('barcode-form').addEventListener('submit', function() {
     // フォーム送信後、少し待ってから入力欄をクリア＆フォーカス

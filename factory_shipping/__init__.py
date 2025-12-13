@@ -76,6 +76,10 @@ def register_blueprints(app):
     from factory_shipping.auth.views import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/fi/auth')
 
+    # monitoring機能
+    from factory_shipping.monitoring.views import monitoring_bp
+    app.register_blueprint(monitoring_bp, url_prefix='/monitoring')
+
     # ルートパス
     from factory_shipping.views import main_bp
     app.register_blueprint(main_bp, url_prefix='/fi')
