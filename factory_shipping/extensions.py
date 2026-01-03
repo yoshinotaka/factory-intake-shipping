@@ -7,12 +7,16 @@
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_socketio import SocketIO
 
 # SQLAlchemy インスタンス
 db = SQLAlchemy()
 
 # Flask-Login インスタンス
 login_manager = LoginManager()
+
+# Flask-SocketIO インスタンス
+socketio = SocketIO()
 
 
 def init_extensions(app):
@@ -36,3 +40,7 @@ def init_extensions(app):
     def load_user(user_id):
         from factory_shipping.models import User
         return User.query.get(int(user_id))
+
+    # Flask-SocketIO の初期化
+    # path パラメータで Socket.IO のエンドポイントを指定
+    socketio.init_app(app, cors_allowed_origins="*", async_mode='eventlet', path='/fi/socket.io')

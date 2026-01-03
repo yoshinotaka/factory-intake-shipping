@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{% if item %}入荷データ編集{% else %}入荷データ作成{% endif %} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>{% if item %}入荷データ編集{% else %}入荷データ作成{% endif %}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.intake_items_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="store_id" class="form-label">店舗 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="store_id" name="store_id" required>
+                                    <option value="">選択してください</option>
+                                    {% for store in stores %}
+                                    <option value="{{ store.id }}"
+                                        {% if item and item.store_id == store.id %}selected{% endif %}>
+                                        {{ store.store_code }} - {{ store.store_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="slip_number" class="form-label">伝票No</label>
+                                <input type="text" class="form-control" id="slip_number" name="slip_number"
+                                       value="{{ item.slip_number if item else '' }}" placeholder="例: 12345">
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="tag_number" class="form-label">タグ番号 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="tag_number" name="tag_number"
+                                       value="{{ item.tag_number if item else '' }}" required placeholder="例: 4-212">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="product_name" class="form-label">商品名</label>
+                                <input type="text" class="form-control" id="product_name" name="product_name"
+                                       value="{{ item.product_name if item else '' }}" placeholder="商品名">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="customer_name" class="form-label">顧客名</label>
+                                <input type="text" class="form-control" id="customer_name" name="customer_name"
+                                       value="{{ item.customer_name if item else '' }}" placeholder="顧客名">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="amount" class="form-label">金額（円）</label>
+                                <input type="number" class="form-control" id="amount" name="amount"
+                                       value="{{ item.amount if item else '' }}" placeholder="10000">
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="quantity" class="form-label">数量</label>
+                                <input type="number" class="form-control" id="quantity" name="quantity"
+                                       value="{{ item.quantity if item else 1 }}" min="1" value="1">
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="intake_date" class="form-label">預かり日 <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="intake_date" name="intake_date"
+                                       value="{{ item.intake_date.strftime('%Y-%m-%d') if item and item.intake_date else '' }}" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="scheduled_date" class="form-label">出荷予定日</label>
+                                <input type="date" class="form-control" id="scheduled_date" name="scheduled_date"
+                                       value="{{ item.scheduled_date.strftime('%Y-%m-%d') if item and item.scheduled_date else '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="status_id" class="form-label">商品状態</label>
+                                <select class="form-select" id="status_id" name="status_id">
+                                    <option value="0">未設定</option>
+                                    {% for status in item_statuses %}
+                                    <option value="{{ status.id }}"
+                                        {% if item and item.status_id == status.id %}selected{% endif %}>
+                                        {{ status.status_code }} - {{ status.status_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="intake_status" class="form-label">入荷状態</label>
+                                <select class="form-select" id="intake_status" name="intake_status">
+                                    <option value="通常" {% if item and item.intake_status == '通常' %}selected{% endif %}>通常</option>
+                                    <option value="工場請求中" {% if item and item.intake_status == '工場請求中' %}selected{% endif %}>工場請求中</option>
+                                    <option value="完了済み" {% if item and item.intake_status == '完了済み' %}selected{% endif %}>完了済み</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="shipped_at" class="form-label">出荷日時</label>
+                                <input type="datetime-local" class="form-control" id="shipped_at" name="shipped_at"
+                                       value="{{ item.shipped_at.strftime('%Y-%m-%dT%H:%M') if item and item.shipped_at else '' }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="wrapping" class="form-label">包装</label>
+                                <input type="text" class="form-control" id="wrapping" name="wrapping"
+                                       value="{{ item.wrapping if item else '' }}" placeholder="例: ダンボール">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shipping_method" class="form-label">出荷便</label>
+                                <input type="text" class="form-control" id="shipping_method" name="shipping_method"
+                                       value="{{ item.shipping_method if item else '' }}" placeholder="例: ヤマト便">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">備考</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3">{{ item.notes if item else '' }}</textarea>
+                    </div>
+
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-info">
+                            {% if item %}更新{% else %}作成{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

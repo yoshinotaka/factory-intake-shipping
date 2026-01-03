@@ -6,6 +6,14 @@
 
 import os
 from datetime import timedelta
+from pathlib import Path
+from dotenv import load_dotenv
+
+# .env ファイルを読み込む（プロジェクトルートを明示的に指定）
+project_root = Path(__file__).parent.absolute()
+env_file = project_root / '.env'
+if env_file.exists():
+    load_dotenv(dotenv_path=env_file)
 
 
 class BaseConfig:

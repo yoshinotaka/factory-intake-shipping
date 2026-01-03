@@ -22,15 +22,18 @@
 import os
 import sys
 from datetime import datetime, date
+from factory_shipping.utils import now_jst, today_jst
 from pathlib import Path
 from dotenv import load_dotenv
 
-# .env ファイルを読み込む
-load_dotenv()
+# .env ファイルを読み込む（プロジェクトルートを明示的に指定）
+project_root = Path(__file__).parent.absolute()
+env_file = project_root / '.env'
+load_dotenv(dotenv_path=env_file)
 
 from factory_shipping import create_app
-from factory_shipping.extensions import db
-from factory_shipping.models import User, Store
+from factory_shipping.extensions import db, socketio
+from factory_shipping.models import User, Store, JournalData
 from factory_shipping.intake.services import import_hanjow_csv
 
 # アプリケーションインスタンスを作成
@@ -156,7 +159,7 @@ def import_hanjow(target_date=None):
                 print("正しい形式: YYYY-MM-DD (例: 2025-11-11)")
                 sys.exit(1)
         else:
-            dt = datetime.now()
+            dt = now_jst()
 
         # ファイル名を生成
         date_str = dt.strftime('%Y%m%d')
@@ -209,6 +212,160 @@ def import_hanjow(target_date=None):
             sys.exit(1)
 
 
+def import_journal(target_date=None):
+    """
+    ジャーナルCSVファイルを取り込む
+
+    Args:
+        target_date (str, optional): 対象日付 (YYYY-MM-DD形式)
+                                     指定しない場合は今日の日付を使用
+
+    例:
+        python run.py import-journal --date 2025-12-22
+        python run.py import-journal  # 今日の日付
+
+    cron 設定例（毎日 23:00 実行）:
+        0 23 * * * cd /var/www/html/factory-intake-shipping && /var/www/html/factory-intake-shipping/venv/bin/python run.py import-journal >> /var/log/factory-shipping/import-journal.log 2>&1
+    """
+    import csv
+    import codecs
+
+    with app.app_context():
+        # 対象日付を決定
+        if target_date:
+            try:
+                dt = datetime.strptime(target_date, '%Y-%m-%d')
+            except ValueError:
+                print(f"エラー: 日付の形式が正しくありません: {target_date}")
+                print("正しい形式: YYYY-MM-DD (例: 2025-12-22)")
+                sys.exit(1)
+        else:
+            dt = now_jst()
+
+        # ファイル名を生成
+        date_str = dt.strftime('%Y%m%d')
+        csv_dir = Path('/var/www/html/king-req/journal_data_csv')
+
+        # 2種類のファイル名パターンを試す
+        csv_files = [
+            csv_dir / f'journal_data_{date_str}.csv',
+            csv_dir / f'customer_data_from_journal_{date_str}.csv'
+        ]
+
+        print("=" * 60)
+        print("  ジャーナルCSV 取り込み処理")
+        print("=" * 60)
+        print(f"  対象日付: {dt.strftime('%Y-%m-%d')}")
+        print("=" * 60)
+        print()
+
+        # ファイル存在チェック
+        csv_file = None
+        for f in csv_files:
+            if f.exists():
+                csv_file = f
+                break
+
+        if not csv_file:
+            print(f"エラー: CSV ファイルが見つかりません")
+            print(f"試したパス:")
+            for f in csv_files:
+                print(f"  - {f}")
+            sys.exit(1)
+
+        print(f"  CSV ファイル: {csv_file}")
+        print()
+
+        try:
+            # CSV 取り込み実行
+            total_rows = 0
+            created = 0
+            skipped = 0
+            errors = 0
+            imported_at = now_jst()
+
+            with codecs.open(csv_file, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+
+                for row in reader:
+                    total_rows += 1
+
+                    try:
+                        # 日付をパース
+                        try:
+                            row_date = datetime.strptime(row['date'], '%Y-%m-%d').date()
+                        except ValueError:
+                            print(f"警告: 日付の形式が不正です (行{total_rows}): {row['date']}")
+                            errors += 1
+                            continue
+
+                        # 既存レコードをチェック（重複防止）
+                        existing = JournalData.query.filter_by(
+                            date=row_date,
+                            store_no=row['store_no'],
+                            slip_no=row['slip_no'],
+                            customer_name=row['customer_name']
+                        ).first()
+
+                        if existing:
+                            skipped += 1
+                            continue
+
+                        # 新規レコード作成
+                        journal = JournalData(
+                            date=row_date,
+                            store_no=row['store_no'],
+                            slip_no=row['slip_no'],
+                            customer_name=row['customer_name'],
+                            phone=row.get('phone', ''),
+                            slip_content=row.get('slip_content', ''),
+                            imported_at=imported_at
+                        )
+
+                        db.session.add(journal)
+                        created += 1
+
+                        # 100件ごとにコミット
+                        if created % 100 == 0:
+                            db.session.commit()
+                            print(f"  処理中... {total_rows} 行 (新規: {created}, スキップ: {skipped})")
+
+                    except Exception as e:
+                        errors += 1
+                        print(f"エラー (行{total_rows}): {e}")
+                        continue
+
+                # 最終コミット
+                db.session.commit()
+
+            # 結果表示
+            print()
+            print("=" * 60)
+            print("  取り込み結果")
+            print("=" * 60)
+            print(f"  総行数:     {total_rows} 行")
+            print(f"  新規作成:   {created} 件")
+            print(f"  スキップ:   {skipped} 件（重複）")
+            print(f"  エラー:     {errors} 件")
+            print("=" * 60)
+
+            if errors > 0:
+                print()
+                print("警告: エラーが発生しました。ログを確認してください。")
+                sys.exit(1)
+            else:
+                print()
+                print("取り込みが正常に完了しました。")
+
+        except Exception as e:
+            print()
+            print(f"エラー: CSV 取り込み中に予期しない問題が発生しました")
+            print(f"詳細: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+
 @app.cli.command()
 def init_db_command():
     """データベース初期化コマンド"""
@@ -244,6 +401,12 @@ if __name__ == '__main__':
             if len(sys.argv) > 2 and sys.argv[2] == '--date' and len(sys.argv) > 3:
                 target_date = sys.argv[3]
             import_hanjow(target_date)
+        elif command == 'import-journal':
+            # --date オプションの処理
+            target_date = None
+            if len(sys.argv) > 2 and sys.argv[2] == '--date' and len(sys.argv) > 3:
+                target_date = sys.argv[3]
+            import_journal(target_date)
         elif command == 'list-users':
             list_users()
         else:
@@ -256,6 +419,8 @@ if __name__ == '__main__':
             print("  list-users           - ユーザー一覧を表示")
             print("  import-hanjow        - hanjow CSV 取り込み（今日の日付）")
             print("  import-hanjow --date YYYY-MM-DD  - 指定日付の CSV を取り込み")
+            print("  import-journal       - ジャーナル CSV 取り込み（今日の日付）")
+            print("  import-journal --date YYYY-MM-DD - 指定日付の CSV を取り込み")
             sys.exit(1)
     else:
         # 開発サーバーを起動
@@ -269,7 +434,8 @@ if __name__ == '__main__':
         print(f"  URL: http://{host}:{port}/fi/")
         print(f"  環境: {os.environ.get('FLASK_ENV', 'development')}")
         print(f"  デバッグ: {debug}")
+        print("  WebSocket: 有効")
         print("=" * 50)
         print()
 
-        app.run(host=host, port=port, debug=debug)
+        socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)

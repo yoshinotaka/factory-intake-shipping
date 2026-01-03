@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{% if store %}店舗編集{% else %}店舗作成{% endif %} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>{% if store %}店舗編集{% else %}店舗作成{% endif %}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.stores_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="store_code" class="form-label">店舗コード <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="store_code" name="store_code"
+                               value="{{ store.store_code if store else '' }}" required
+                               placeholder="例: 024">
+                        <small class="form-text text-muted">店舗を識別するコード（例: 024）</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="store_name" class="form-label">店舗名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="store_name" name="store_name"
+                               value="{{ store.store_name if store else '' }}" required
+                               placeholder="例: オザム日の出店">
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="is_active" name="is_active"
+                               {% if not store or store.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            アクティブ（有効）
+                        </label>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success">
+                            {% if store %}更新{% else %}作成{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

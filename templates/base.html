@@ -35,8 +35,16 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('intake.import_status') }}">入荷取得状況</a>
                     </li>
+                    {% if current_user.is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin.journal_import_status') }}">ジャーナル取得状況</a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('shipping.index') }}">出荷スキャン</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('shipping.process') }}">出荷処理</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('status.unshipped') }}">未出荷一覧</a>
@@ -47,10 +55,49 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('monitoring.index') }}">Cron監視</a>
                     </li>
+                    {% if current_user.is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link text-warning" href="{{ url_for('admin.index') }}">管理者画面</a>
+                    </li>
+                    {% endif %}
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav">
                     {% if current_user.is_authenticated %}
+                    <!-- 担当者選択 -->
+                    <li class="nav-item dropdown me-3">
+                        <a class="nav-link dropdown-toggle {% if not selected_operator %}text-warning{% endif %}"
+                           href="#" id="operatorDropdown" role="button" data-bs-toggle="dropdown"
+                           title="作業担当者を選択">
+                            <i class="bi bi-person-badge"></i>
+                            {% if selected_operator %}
+                                {{ selected_operator.operator_name }}
+                            {% else %}
+                                <strong>担当未設定</strong>
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">担当者を選択</h6></li>
+                            {% for operator in all_operators %}
+                            <li>
+                                <a class="dropdown-item {% if selected_operator and selected_operator.id == operator.id %}active{% endif %}"
+                                   href="#"
+                                   onclick="setOperator({{ operator.id }}, '{{ operator.operator_name }}'); return false;">
+                                    {{ operator.operator_name }} ({{ operator.operator_code }})
+                                </a>
+                            </li>
+                            {% endfor %}
+                            {% if all_operators %}
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            <li>
+                                <a class="dropdown-item text-danger" href="#" onclick="clearOperator(); return false;">
+                                    <i class="bi bi-x-circle"></i> 担当者を解除
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                    <!-- ユーザー情報 -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
                             {{ current_user.username }}
@@ -98,8 +145,72 @@
         </div>
     </footer>
 
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <!-- 担当者選択JavaScript -->
+    <script>
+        function setOperator(operatorId, operatorName) {
+            fetch('/fi/set-operator', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    operator_id: operatorId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // ページをリロードして表示を更新
+                    location.reload();
+                } else {
+                    alert('エラー: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('担当者の設定に失敗しました');
+            });
+        }
+
+        function clearOperator() {
+            if (confirm('担当者を解除しますか？')) {
+                fetch('/fi/set-operator', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        operator_id: 0
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // ページをリロードして表示を更新
+                        location.reload();
+                    } else {
+                        alert('エラー: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('担当者の解除に失敗しました');
+                });
+            }
+        }
+    </script>
 
     <!-- カスタムJS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

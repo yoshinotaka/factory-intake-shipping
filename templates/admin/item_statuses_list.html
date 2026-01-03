@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}商品状態管理 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>商品状態管理</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">ダッシュボードに戻る</a>
+        <a href="{{ url_for('admin.item_statuses_create') }}" class="btn btn-secondary">新規商品状態作成</a>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>状態コード</th>
+                <th>状態名</th>
+                <th>説明</th>
+                <th>表示順</th>
+                <th>有効</th>
+                <th>作成日時</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for status in statuses.items %}
+            <tr>
+                <td>{{ status.id }}</td>
+                <td><code>{{ status.status_code }}</code></td>
+                <td><strong>{{ status.status_name }}</strong></td>
+                <td>{{ status.description or '-' }}</td>
+                <td>{{ status.display_order }}</td>
+                <td>
+                    {% if status.is_active %}
+                        <span class="badge bg-success">有効</span>
+                    {% else %}
+                        <span class="badge bg-secondary">無効</span>
+                    {% endif %}
+                </td>
+                <td>{{ status.created_at.strftime('%Y-%m-%d %H:%M:%S') if status.created_at else '-' }}</td>
+                <td>
+                    <a href="{{ url_for('admin.item_statuses_edit', status_id=status.id) }}" class="btn btn-sm btn-warning">編集</a>
+                    <form method="POST" action="{{ url_for('admin.item_statuses_delete', status_id=status.id) }}" style="display: inline;" onsubmit="return confirm('本当に削除しますか？');">
+                        <button type="submit" class="btn btn-sm btn-danger">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- ページネーション -->
+{% if statuses.pages > 1 %}
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        {% if statuses.has_prev %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin.item_statuses_list', page=statuses.prev_num) }}">前へ</a>
+        </li>
+        {% endif %}
+
+        {% for page_num in statuses.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+            {% if page_num %}
+                {% if page_num == statuses.page %}
+                <li class="page-item active"><a class="page-link" href="#">{{ page_num }}</a></li>
+                {% else %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin.item_statuses_list', page=page_num) }}">{{ page_num }}</a></li>
+                {% endif %}
+            {% else %}
+                <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+            {% endif %}
+        {% endfor %}
+
+        {% if statuses.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin.item_statuses_list', page=statuses.next_num) }}">次へ</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+
+
+
+
+
+
+
+
+

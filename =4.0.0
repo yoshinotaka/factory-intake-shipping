@@ -1,0 +1,5 @@
+Requirement already satisfied: reportlab in ./venv/lib/python3.9/site-packages (4.4.7)
+Requirement already satisfied: pillow>=9.0.0 in ./venv/lib/python3.9/site-packages (from reportlab) (11.3.0)
+Requirement already satisfied: charset-normalizer in ./venv/lib/python3.9/site-packages (from reportlab) (3.4.4)
+WARNING: You are using pip version 21.3.1; however, version 25.3 is available.
+You should consider upgrading via the '/var/www/html/factory-intake-shipping/venv/bin/python3 -m pip install --upgrade pip' command.

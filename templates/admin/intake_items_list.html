@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}入荷データ管理 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<style>
+    .table-scroll-container {
+        position: relative;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .table-scroll-container table {
+        min-width: 100%;
+        white-space: nowrap;
+    }
+    
+    .table-scroll-container th,
+    .table-scroll-container td {
+        white-space: nowrap;
+        padding: 8px;
+    }
+    
+    /* 操作列を固定 */
+    .table-scroll-container th:last-child,
+    .table-scroll-container td:last-child {
+        position: sticky;
+        right: 0;
+        background-color: inherit;
+        z-index: 10;
+        box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+    }
+    
+    .table-scroll-container thead th:last-child {
+        background-color: #212529;
+        z-index: 11;
+    }
+    
+    .table-scroll-container tbody tr:nth-child(even) td:last-child {
+        background-color: #f8f9fa;
+    }
+    
+    .table-scroll-container tbody tr:nth-child(odd) td:last-child {
+        background-color: #ffffff;
+    }
+    
+    .table-scroll-container tbody tr:hover td:last-child {
+        background-color: #e9ecef;
+    }
+</style>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>入荷データ管理</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">ダッシュボードに戻る</a>
+        <a href="{{ url_for('admin.intake_items_create') }}" class="btn btn-info">新規入荷データ作成</a>
+    </div>
+</div>
+
+<!-- 検索フィルター -->
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="GET" id="searchForm">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label for="store_code" class="form-label">店舗コード</label>
+                    <input type="text" class="form-control" id="store_code" name="store_code"
+                           value="{{ request.args.get('store_code', '') }}" placeholder="店舗コードで検索">
+                </div>
+                <div class="col-md-2">
+                    <label for="tag_number" class="form-label">タグ番号</label>
+                    <input type="text" class="form-control" id="tag_number" name="tag_number"
+                           value="{{ request.args.get('tag_number', '') }}" placeholder="タグ番号で検索">
+                </div>
+                <div class="col-md-2">
+                    <label for="status_id" class="form-label">商品状態</label>
+                    <select class="form-select" id="status_id" name="status_id">
+                        <option value="">すべて</option>
+                        {% for status in item_statuses %}
+                        <option value="{{ status.id }}" {% if request.args.get('status_id')|int == status.id %}selected{% endif %}>{{ status.status_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="per_page" class="form-label">表示件数</label>
+                    <select class="form-select" id="per_page" name="per_page">
+                        <option value="50" {% if request.args.get('per_page', '50')|int == 50 %}selected{% endif %}>50件</option>
+                        <option value="100" {% if request.args.get('per_page')|int == 100 %}selected{% endif %}>100件</option>
+                        <option value="200" {% if request.args.get('per_page')|int == 200 %}selected{% endif %}>200件</option>
+                        <option value="500" {% if request.args.get('per_page')|int == 500 %}selected{% endif %}>500件</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">検索</button>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-secondary w-100" id="toggleAdvancedSearch">
+                        <i class="bi bi-chevron-down" id="advancedSearchIcon"></i> 詳細検索
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 詳細検索（初期状態は非表示） -->
+            <div id="advancedSearch" style="display: none;" class="mt-4 pt-4 border-top">
+                <h6 class="mb-3"><i class="bi bi-search"></i> 詳細検索</h6>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="store_name" class="form-label">店舗名</label>
+                        <input type="text" class="form-control form-control-sm" id="store_name" name="store_name"
+                               value="{{ request.args.get('store_name', '') }}" placeholder="店舗名で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="slip_number" class="form-label">伝票No</label>
+                        <input type="text" class="form-control form-control-sm" id="slip_number" name="slip_number"
+                               value="{{ request.args.get('slip_number', '') }}" placeholder="伝票Noで検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="product_name" class="form-label">商品名</label>
+                        <input type="text" class="form-control form-control-sm" id="product_name" name="product_name"
+                               value="{{ request.args.get('product_name', '') }}" placeholder="商品名で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="customer_name" class="form-label">顧客名</label>
+                        <input type="text" class="form-control form-control-sm" id="customer_name" name="customer_name"
+                               value="{{ request.args.get('customer_name', '') }}" placeholder="顧客名で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="amount_from" class="form-label">金額（From）</label>
+                        <input type="number" class="form-control form-control-sm" id="amount_from" name="amount_from"
+                               value="{{ request.args.get('amount_from', '') }}" placeholder="最小金額">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="amount_to" class="form-label">金額（To）</label>
+                        <input type="number" class="form-control form-control-sm" id="amount_to" name="amount_to"
+                               value="{{ request.args.get('amount_to', '') }}" placeholder="最大金額">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="quantity_from" class="form-label">数量（From）</label>
+                        <input type="number" class="form-control form-control-sm" id="quantity_from" name="quantity_from"
+                               value="{{ request.args.get('quantity_from', '') }}" placeholder="最小数量">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="quantity_to" class="form-label">数量（To）</label>
+                        <input type="number" class="form-control form-control-sm" id="quantity_to" name="quantity_to"
+                               value="{{ request.args.get('quantity_to', '') }}" placeholder="最大数量">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="intake_date_from" class="form-label">預かり日（From）</label>
+                        <input type="date" class="form-control form-control-sm" id="intake_date_from" name="intake_date_from"
+                               value="{{ request.args.get('intake_date_from', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="intake_date_to" class="form-label">預かり日（To）</label>
+                        <input type="date" class="form-control form-control-sm" id="intake_date_to" name="intake_date_to"
+                               value="{{ request.args.get('intake_date_to', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="scheduled_date_from" class="form-label">出荷予定日（From）</label>
+                        <input type="date" class="form-control form-control-sm" id="scheduled_date_from" name="scheduled_date_from"
+                               value="{{ request.args.get('scheduled_date_from', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="scheduled_date_to" class="form-label">出荷予定日（To）</label>
+                        <input type="date" class="form-control form-control-sm" id="scheduled_date_to" name="scheduled_date_to"
+                               value="{{ request.args.get('scheduled_date_to', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="wrapping" class="form-label">包装</label>
+                        <input type="text" class="form-control form-control-sm" id="wrapping" name="wrapping"
+                               value="{{ request.args.get('wrapping', '') }}" placeholder="包装で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="shipping_method" class="form-label">出荷便</label>
+                        <input type="text" class="form-control form-control-sm" id="shipping_method" name="shipping_method"
+                               value="{{ request.args.get('shipping_method', '') }}" placeholder="出荷便で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="intake_status" class="form-label">入荷状態</label>
+                        <input type="text" class="form-control form-control-sm" id="intake_status" name="intake_status"
+                               value="{{ request.args.get('intake_status', '') }}" placeholder="入荷状態で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="shipped_at_from" class="form-label">出荷日時（From）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="shipped_at_from" name="shipped_at_from"
+                               value="{{ request.args.get('shipped_at_from', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="shipped_at_to" class="form-label">出荷日時（To）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="shipped_at_to" name="shipped_at_to"
+                               value="{{ request.args.get('shipped_at_to', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="notes" class="form-label">備考</label>
+                        <input type="text" class="form-control form-control-sm" id="notes" name="notes"
+                               value="{{ request.args.get('notes', '') }}" placeholder="備考で検索">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="imported_at_from" class="form-label">CSV取り込み日時（From）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="imported_at_from" name="imported_at_from"
+                               value="{{ request.args.get('imported_at_from', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="imported_at_to" class="form-label">CSV取り込み日時（To）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="imported_at_to" name="imported_at_to"
+                               value="{{ request.args.get('imported_at_to', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="created_at_from" class="form-label">作成日時（From）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="created_at_from" name="created_at_from"
+                               value="{{ request.args.get('created_at_from', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="created_at_to" class="form-label">作成日時（To）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="created_at_to" name="created_at_to"
+                               value="{{ request.args.get('created_at_to', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="updated_at_from" class="form-label">更新日時（From）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="updated_at_from" name="updated_at_from"
+                               value="{{ request.args.get('updated_at_from', '').replace(' ', 'T') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="updated_at_to" class="form-label">更新日時（To）</label>
+                        <input type="datetime-local" class="form-control form-control-sm" id="updated_at_to" name="updated_at_to"
+                               value="{{ request.args.get('updated_at_to', '').replace(' ', 'T') }}">
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleButton = document.getElementById('toggleAdvancedSearch');
+    const advancedSearch = document.getElementById('advancedSearch');
+    const advancedSearchIcon = document.getElementById('advancedSearchIcon');
+    const searchForm = document.getElementById('searchForm');
+    
+    // URLパラメータに詳細検索の値がある場合は表示
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasAdvancedParams = ['store_name', 'slip_number', 'product_name', 'customer_name', 
+                               'amount_from', 'amount_to', 'quantity_from', 'quantity_to',
+                               'intake_date_from', 'intake_date_to', 'scheduled_date_from', 'scheduled_date_to',
+                               'wrapping', 'shipping_method', 'intake_status',
+                               'shipped_at_from', 'shipped_at_to', 'notes',
+                               'imported_at_from', 'imported_at_to',
+                               'created_at_from', 'created_at_to',
+                               'updated_at_from', 'updated_at_to'].some(param => urlParams.has(param));
+    
+    if (hasAdvancedParams) {
+        advancedSearch.style.display = 'block';
+        advancedSearchIcon.className = 'bi bi-chevron-up';
+    }
+    
+    toggleButton.addEventListener('click', function() {
+        if (advancedSearch.style.display === 'none') {
+            advancedSearch.style.display = 'block';
+            advancedSearchIcon.className = 'bi bi-chevron-up';
+        } else {
+            advancedSearch.style.display = 'none';
+            advancedSearchIcon.className = 'bi bi-chevron-down';
+        }
+    });
+    
+    // フォーム送信時のデバッグ（開発用）
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            const formData = new FormData(searchForm);
+            const params = new URLSearchParams();
+            const allFields = {};
+            for (const [key, value] of formData.entries()) {
+                allFields[key] = value;
+                if (value) {
+                    params.append(key, value);
+                }
+            }
+            console.log('フォーム内の全フィールド:', allFields);
+            console.log('送信される検索パラメータ:', params.toString());
+            
+            // 詳細検索フィールドが含まれているか確認
+            const advancedFields = ['store_name', 'slip_number', 'product_name', 'customer_name'];
+            const hasAdvancedFields = advancedFields.some(field => allFields[field]);
+            console.log('詳細検索フィールドが含まれているか:', hasAdvancedFields, advancedFields.filter(f => allFields[f]));
+        });
+    }
+});
+</script>
+
+<div class="table-scroll-container">
+    <table class="table table-striped table-hover table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>店舗コード</th>
+                <th>店舗名</th>
+                <th>伝票No</th>
+                <th>タグ番号</th>
+                <th>商品名</th>
+                <th>顧客名</th>
+                <th>金額</th>
+                <th>数量</th>
+                <th>預かり日</th>
+                <th>出荷予定日</th>
+                <th>包装</th>
+                <th>出荷便</th>
+                <th>入荷状態</th>
+                <th>商品状態</th>
+                <th>出荷日時</th>
+                <th>備考</th>
+                <th>CSV取り込み日時</th>
+                <th>作成日時</th>
+                <th>更新日時</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in pagination.items %}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.store_code }}</td>
+                <td>{{ item.store_name or '-' }}</td>
+                <td>{{ item.slip_number or '-' }}</td>
+                <td>{{ item.tag_number }}</td>
+                <td>{{ item.product_name or '-' }}</td>
+                <td>{{ item.customer_name or '-' }}</td>
+                <td>{{ '¥{:,}'.format(item.amount) if item.amount else '-' }}</td>
+                <td>{{ item.quantity or '-' }}</td>
+                <td>{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
+                <td>{{ item.scheduled_date.strftime('%Y-%m-%d') if item.scheduled_date else '-' }}</td>
+                <td>{{ item.wrapping or '-' }}</td>
+                <td>{{ item.shipping_method or '-' }}</td>
+                <td>
+                    <span class="badge bg-secondary">{{ item.intake_status }}</span>
+                </td>
+                <td>
+                    {% if item.status %}
+                        <span class="badge bg-info">{{ item.status.status_code }} - {{ item.status.status_name }}</span>
+                    {% else %}
+                        <span class="badge bg-secondary">未設定</span>
+                    {% endif %}
+                </td>
+                <td>{{ item.shipped_at.strftime('%Y-%m-%d %H:%M') if item.shipped_at else '-' }}</td>
+                <td>{{ item.notes or '-' }}</td>
+                <td>{{ item.imported_at.strftime('%Y-%m-%d %H:%M') if item.imported_at else '-' }}</td>
+                <td>{{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '-' }}</td>
+                <td>{{ item.updated_at.strftime('%Y-%m-%d %H:%M') if item.updated_at else '-' }}</td>
+                <td>
+                    <a href="{{ url_for('admin.intake_items_edit', item_id=item.id) }}" class="btn btn-sm btn-warning">編集</a>
+                    <form method="POST" action="{{ url_for('admin.intake_items_delete', item_id=item.id) }}" style="display: inline;" onsubmit="return confirm('本当に削除しますか？');">
+                        <button type="submit" class="btn btn-sm btn-danger">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- ページネーション情報 -->
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            全{{ pagination.total }}件中 {{ (pagination.page - 1) * pagination.per_page + 1 }}〜{{ min(pagination.page * pagination.per_page, pagination.total) }}件を表示
+            （ページ {{ pagination.page }}/{{ pagination.pages }}）
+        </div>
+    </div>
+</div>
+
+<!-- ページネーション -->
+{% if pagination.pages > 1 %}
+<nav aria-label="ページネーション">
+    <ul class="pagination justify-content-center">
+        <!-- 前へ -->
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('admin.intake_items_list', page=pagination.prev_num, **request.args.to_dict()) if pagination.has_prev else '#' }}">前へ</a>
+        </li>
+
+        <!-- ページ番号 -->
+        {% for page_num in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
+            {% if page_num %}
+                <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                    {% set args_dict = request.args.to_dict() %}
+                    {% set _ = args_dict.update({'page': page_num}) %}
+                    <a class="page-link" href="{{ url_for('admin.intake_items_list', **args_dict) }}">{{ page_num }}</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+
+        <!-- 次へ -->
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('admin.intake_items_list', page=pagination.next_num, **request.args.to_dict()) if pagination.has_next else '#' }}">次へ</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

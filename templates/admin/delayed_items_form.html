@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{% if item %}遅れ品編集{% else %}遅れ品登録{% endif %} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>{% if item %}遅れ品編集{% else %}遅れ品登録{% endif %}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.delayed_items_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="intake_item_id" class="form-label">入荷データ <span class="text-danger">*</span></label>
+                        <select class="form-select" id="intake_item_id" name="intake_item_id" required {% if item %}disabled{% endif %}>
+                            <option value="">選択してください</option>
+                            {% for intake_item in intake_items %}
+                            <option value="{{ intake_item.id }}"
+                                {% if item and item.intake_item_id == intake_item.id %}selected{% endif %}>
+                                {{ intake_item.store_code }} / {{ intake_item.tag_number }} - {{ intake_item.product_name or '商品名なし' }} ({{ intake_item.intake_date.strftime('%Y-%m-%d') if intake_item.intake_date else '-' }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if item %}
+                        <input type="hidden" name="intake_item_id" value="{{ item.intake_item_id }}">
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="delay_reason" class="form-label">遅延理由</label>
+                        <textarea class="form-control" id="delay_reason" name="delay_reason" rows="3">{{ item.delay_reason if item else '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="expected_date" class="form-label">予定日</label>
+                        <input type="date" class="form-control" id="expected_date" name="expected_date"
+                               value="{{ item.expected_date.strftime('%Y-%m-%d') if item and item.expected_date else '' }}">
+                    </div>
+
+                    {% if item %}
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="resolved" name="resolved"
+                               {% if item.resolved %}checked{% endif %}>
+                        <label class="form-check-label" for="resolved">
+                            解決済み
+                        </label>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            {% if item %}更新{% else %}登録{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

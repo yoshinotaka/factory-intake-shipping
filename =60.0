@@ -1,0 +1,26 @@
+Collecting weasyprint
+  Downloading weasyprint-66.0-py3-none-any.whl (301 kB)
+Collecting Pillow>=9.1.0
+  Downloading pillow-11.3.0-cp39-cp39-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.6 MB)
+Collecting pydyf>=0.11.0
+  Downloading pydyf-0.11.0-py3-none-any.whl (8.1 kB)
+Requirement already satisfied: cffi>=0.6 in ./venv/lib/python3.9/site-packages (from weasyprint) (2.0.0)
+Collecting fonttools[woff]>=4.0.0
+  Downloading fonttools-4.60.2-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.8 MB)
+Collecting cssselect2>=0.8.0
+  Downloading cssselect2-0.8.0-py3-none-any.whl (15 kB)
+Collecting Pyphen>=0.9.1
+  Downloading pyphen-0.17.2-py3-none-any.whl (2.1 MB)
+Collecting tinycss2>=1.4.0
+  Downloading tinycss2-1.4.0-py3-none-any.whl (26 kB)
+Collecting tinyhtml5>=2.0.0b1
+  Downloading tinyhtml5-2.0.0-py3-none-any.whl (39 kB)
+Requirement already satisfied: pycparser in ./venv/lib/python3.9/site-packages (from cffi>=0.6->weasyprint) (2.23)
+Collecting webencodings
+  Downloading webencodings-0.5.1-py2.py3-none-any.whl (11 kB)
+Collecting brotli>=1.0.1
+  Downloading brotli-1.2.0-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.4 MB)
+Collecting zopfli>=0.1.4
+  Downloading zopfli-0.2.3.post1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl (704 kB)
+Installing collected packages: webencodings, zopfli, tinycss2, fonttools, brotli, tinyhtml5, Pyphen, pydyf, Pillow, cssselect2, weasyprint
+Successfully installed Pillow-11.3.0 Pyphen-0.17.2 brotli-1.2.0 cssselect2-0.8.0 fonttools-4.60.2 pydyf-0.11.0 tinycss2-1.4.0 tinyhtml5-2.0.0 weasyprint-66.0 webencodings-0.5.1 zopfli-0.2.3.post1

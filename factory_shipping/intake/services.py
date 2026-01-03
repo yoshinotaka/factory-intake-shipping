@@ -11,7 +11,8 @@ from typing import Dict, Optional
 from pathlib import Path
 
 from factory_shipping.extensions import db
-from factory_shipping.models import Store, IntakeItem
+from factory_shipping.models import Store, IntakeItem, ItemStatus
+from factory_shipping.utils import now_jst
 
 # ロガー設定
 logger = logging.getLogger(__name__)
@@ -221,6 +222,9 @@ def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
         logger.debug(f"重複データをスキップ: {store_code}/{slip_number}/{tag_number}/{intake_date}")
         return 'skipped'
 
+    # 入荷状態を取得（初期状態）
+    received_status = ItemStatus.query.filter_by(status_code='received').first()
+
     # 新規作成
     intake_item = IntakeItem(
         store_id=store.id,
@@ -232,8 +236,8 @@ def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
         customer_name=customer_name,
         product_name=product_name,
         amount=amount,
-        is_shipped=False,
-        imported_at=datetime.utcnow(),  # CSV取り込み日時を記録
+        status_id=received_status.id if received_status else None,  # 初期状態を設定
+        imported_at=now_jst(),  # CSV取り込み日時を記録
         # 後方互換性のため旧フィールドにもコピー
         item_code=tag_number,
         item_name=product_name,

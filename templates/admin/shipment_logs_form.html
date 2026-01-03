@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}{% if log %}出荷ログ編集{% else %}出荷ログ作成{% endif %} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>{% if log %}出荷ログ編集{% else %}出荷ログ作成{% endif %}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.shipment_logs_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="intake_item_id" class="form-label">入荷データID <span class="text-danger">*</span></label>
+                                <select class="form-select" id="intake_item_id" name="intake_item_id" required>
+                                    <option value="">選択してください</option>
+                                    {% for item in intake_items %}
+                                    <option value="{{ item.id }}" 
+                                        data-store-id="{{ item.store_id }}"
+                                        data-store-code="{{ item.store_code }}"
+                                        data-intake-date="{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '' }}"
+                                        data-tag-number="{{ item.tag_number }}"
+                                        {% if log and log.intake_item_id == item.id %}selected{% endif %}>
+                                        ID: {{ item.id }} - {{ item.store_code }}/{{ item.tag_number }} - {{ item.product_name or '商品名なし' }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="store_id" class="form-label">店舗 <span class="text-danger">*</span></label>
+                                <select class="form-select" id="store_id" name="store_id" required>
+                                    <option value="">選択してください</option>
+                                    {% for store in stores %}
+                                    <option value="{{ store.id }}"
+                                        {% if log and log.store_id == store.id %}selected{% endif %}>
+                                        {{ store.store_code }} - {{ store.store_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">入荷データIDを選択すると自動的に設定されます</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">店舗コード（読み取り専用）</label>
+                                <input type="text" class="form-control" id="store_code_display"
+                                       value="{{ log.store_code if log else '' }}" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">預かり日（読み取り専用）</label>
+                                <input type="text" class="form-control" id="intake_date_display"
+                                       value="{{ log.intake_date.strftime('%Y-%m-%d') if log and log.intake_date else '' }}" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">タグ番号（読み取り専用）</label>
+                                <input type="text" class="form-control" id="tag_number_display"
+                                       value="{{ log.tag_number if log else '' }}" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">履歴番号（読み取り専用）</label>
+                                <input type="text" class="form-control" id="history_number_display"
+                                       value="{{ log.history_number if log else '' }}"
+                                       placeholder="{% if not log %}新規作成時は自動計算されます{% endif %}" readonly>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">包装（参照）</label>
+                                <input type="text" class="form-control" id="wrapping_display"
+                                       value="{{ log.intake_item.wrapping if log and log.intake_item and log.intake_item.wrapping else '-' }}" readonly>
+                                <small class="form-text text-muted">入荷データから参照されています。変更は入荷データ編集から行ってください。</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">出荷便（参照）</label>
+                                <input type="text" class="form-control" id="shipping_method_display"
+                                       value="{{ log.intake_item.shipping_method if log and log.intake_item and log.intake_item.shipping_method else '-' }}" readonly>
+                                <small class="form-text text-muted">入荷データから参照されています。変更は入荷データ編集から行ってください。</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="scanned_by_user_id" class="form-label">スキャンユーザー</label>
+                                <select class="form-select" id="scanned_by_user_id" name="scanned_by_user_id">
+                                    <option value="">未設定</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}"
+                                        {% if log and log.scanned_by_user_id == user.id %}selected{% endif %}>
+                                        {{ user.username }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="operator_id" class="form-label">担当者</label>
+                                <select class="form-select" id="operator_id" name="operator_id">
+                                    <option value="">未設定</option>
+                                    {% for operator in operators %}
+                                    <option value="{{ operator.id }}"
+                                        {% if log and log.operator_id == operator.id %}selected{% endif %}>
+                                        {{ operator.operator_name }} ({{ operator.operator_code }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="scanned_at" class="form-label">スキャン日時 <span class="text-danger">*</span></label>
+                                <input type="datetime-local" class="form-control" id="scanned_at" name="scanned_at"
+                                       value="{{ log.scanned_at.strftime('%Y-%m-%dT%H:%M') if log and log.scanned_at else '' }}" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="scanned_code" class="form-label">スキャンコード</label>
+                                <input type="text" class="form-control" id="scanned_code" name="scanned_code"
+                                       value="{{ log.scanned_code if log else '' }}" placeholder="バーコード">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="new_status_id" class="form-label">新状態</label>
+                                <select class="form-select" id="new_status_id" name="new_status_id">
+                                    <option value="0">未設定</option>
+                                    {% for status in item_statuses %}
+                                    <option value="{{ status.id }}"
+                                        {% if log and log.new_status_id == status.id %}selected{% endif %}>
+                                        {{ status.status_code }} - {{ status.status_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="status" class="form-label">状態</label>
+                                <select class="form-select" id="status" name="status">
+                                    <option value="completed" {% if not log or log.status == 'completed' %}selected{% endif %}>完了</option>
+                                    <option value="error" {% if log and log.status == 'error' %}selected{% endif %}>エラー</option>
+                                    <option value="pending" {% if log and log.status == 'pending' %}selected{% endif %}>保留</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">備考</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3">{{ log.notes if log else '' }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-warning">
+                            {% if log %}更新{% else %}作成{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const intakeItemSelect = document.getElementById('intake_item_id');
+    const storeIdSelect = document.getElementById('store_id');
+    const storeCodeDisplay = document.getElementById('store_code_display');
+    const intakeDateDisplay = document.getElementById('intake_date_display');
+    const tagNumberDisplay = document.getElementById('tag_number_display');
+    const historyNumberDisplay = document.getElementById('history_number_display');
+
+    if (intakeItemSelect && storeIdSelect) {
+        intakeItemSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const storeId = selectedOption.getAttribute('data-store-id');
+                const storeCode = selectedOption.getAttribute('data-store-code');
+                const intakeDate = selectedOption.getAttribute('data-intake-date');
+                const tagNumber = selectedOption.getAttribute('data-tag-number');
+
+                // 店舗IDを自動設定
+                if (storeId) {
+                    storeIdSelect.value = storeId;
+                }
+
+                // 複合キー情報を表示（編集時のみ）
+                if (storeCodeDisplay) {
+                    storeCodeDisplay.value = storeCode || '';
+                }
+                if (intakeDateDisplay) {
+                    intakeDateDisplay.value = intakeDate || '';
+                }
+                if (tagNumberDisplay) {
+                    tagNumberDisplay.value = tagNumber || '';
+                }
+                // 履歴番号はサーバー側で計算されるため、ここでは更新しない
+            }
+        });
+
+        // 初期表示時にも更新
+        if (intakeItemSelect.value) {
+            intakeItemSelect.dispatchEvent(new Event('change'));
+        }
+    }
+});
+</script>
+{% endblock %}
+
+

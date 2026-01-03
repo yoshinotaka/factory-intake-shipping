@@ -10,6 +10,7 @@
 - [セットアップ手順](#セットアップ手順)
 - [開発環境での実行](#開発環境での実行)
 - [本番環境へのデプロイ](#本番環境へのデプロイ)
+- [ドキュメント](#ドキュメント)
 - [将来の拡張性について](#将来の拡張性について)
 
 ---
@@ -378,6 +379,48 @@ tail -f /var/log/factory-shipping/auto-import.log
 ```
 
 詳細は [docs/AUTO_IMPORT.md](docs/AUTO_IMPORT.md) を参照してください。
+
+### ジャーナルCSV 取り込み
+
+**手動実行**:
+```bash
+# 特定日付のジャーナルCSVを取り込み
+python run.py import-journal --date 2025-12-22
+
+# 今日の日付のジャーナルCSVを取り込み
+python run.py import-journal
+```
+
+**対象CSVファイル**:
+```
+/var/www/html/king-req/journal_data_csv/journal_data_YYYYMMDD.csv
+または
+/var/www/html/king-req/journal_data_csv/customer_data_from_journal_YYYYMMDD.csv
+```
+
+**機能**:
+- 日次でCSVからジャーナルデータ（顧客情報や伝票情報）をインポート
+- 重複チェック機能あり（日付 + 店舗番号 + 伝票番号 + 顧客名）
+- journal_data テーブルに保存
+
+---
+
+## ドキュメント
+
+プロジェクトの詳細なドキュメントは `docs/` ディレクトリにあります。
+
+### 主要ドキュメント
+
+- **[docs/README.md](docs/README.md)** - ドキュメント一覧
+- **[docs/PROJECT_MANUAL.md](docs/PROJECT_MANUAL.md)** - プロジェクトマニュアル（詳細な技術情報）
+- **[docs/NAVIGATION_DIAGRAM.md](docs/NAVIGATION_DIAGRAM.md)** - 画面遷移図
+- **[docs/PERMISSIONS_LIST.md](docs/PERMISSIONS_LIST.md)** - 画面権限一覧
+- **[docs/INTAKE_LIST_SPEC.md](docs/INTAKE_LIST_SPEC.md)** - 入荷一覧画面仕様書
+- **[docs/INTAKE_SHIPPING_GUIDE.md](docs/INTAKE_SHIPPING_GUIDE.md)** - 運用ガイド
+- **[docs/AUTO_IMPORT.md](docs/AUTO_IMPORT.md)** - 自動取り込み機能詳細
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - デプロイメントガイド
+
+詳細は [docs/README.md](docs/README.md) を参照してください。
 
 ---
 

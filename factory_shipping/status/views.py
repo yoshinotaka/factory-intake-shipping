@@ -6,9 +6,10 @@
 
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required
-from factory_shipping.models import IntakeItem, DelayedItem
+from factory_shipping.models import IntakeItem, DelayedItem, ItemStatus
 from factory_shipping.extensions import db
 from datetime import datetime, timedelta
+from factory_shipping.utils import today_jst
 
 status_bp = Blueprint('status', __name__)
 
@@ -23,8 +24,12 @@ def index():
 @status_bp.route('/unshipped')
 @login_required
 def unshipped():
-    """未出荷一覧"""
-    items = IntakeItem.query.filter_by(is_shipped=False).order_by(IntakeItem.scheduled_date).all()
+    """未出荷一覧（status_idがshipped以外）"""
+    shipped_status = ItemStatus.query.filter_by(status_code='shipped').first()
+    if shipped_status:
+        items = IntakeItem.query.filter(IntakeItem.status_id != shipped_status.id).order_by(IntakeItem.scheduled_date).all()
+    else:
+        items = IntakeItem.query.order_by(IntakeItem.scheduled_date).all()
     return render_template('status/unshipped.html', items=items)
 
 
@@ -34,18 +39,23 @@ def delayed():
     """遅れ品管理（未入荷商品を遅れ品ステータスに変更して工場請求）"""
     from factory_shipping.models import Store
 
-    today = datetime.utcnow().date()
+    today = today_jst()
 
     # 店舗フィルター
     selected_store = request.args.get('store', '')
 
-    # 未出荷の商品を表示（入荷状態が「通常」または「遅れ品」）
-    query = IntakeItem.query.filter(
-        IntakeItem.is_shipped == False
-    )
+    # 未出荷の商品を表示（status_idがshipped以外）
+    shipped_status = ItemStatus.query.filter_by(status_code='shipped').first()
+    if shipped_status:
+        query = IntakeItem.query.filter(IntakeItem.status_id != shipped_status.id)
+    else:
+        query = IntakeItem.query
 
-    # 店舗で絞り込み
+    # 店舗で絞り込み（2桁の場合は4桁に変換）
     if selected_store:
+        # 2桁の場合は左側に"00"を追加して4桁にする（例: "02" → "0002"）
+        if len(selected_store) == 2 and selected_store.isdigit():
+            selected_store = '00' + selected_store
         query = query.filter(IntakeItem.store_code == selected_store)
 
     items = query.order_by(IntakeItem.intake_date).all()

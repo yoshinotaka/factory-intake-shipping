@@ -70,19 +70,22 @@ CREATE INDEX idx_intake_items_imported_at ON intake_items(imported_at);
 
 ## 重複チェックロジック
 
-重複は以下の3つのフィールドの組み合わせで判定されます：
+重複は以下の4つのフィールドの組み合わせで判定されます：
 
 ```python
 existing = IntakeItem.query.filter_by(
-    store_code=store_code,        # 店舗コード (例: "0002")
-    intake_date=intake_date,      # 預かり日 (例: 2025-11-28)
-    tag_number=tag_number         # タグ番号 (例: "00-898")
+    store_code=store_code,          # 店舗コード (例: "0002")
+    intake_date=intake_date,        # 預かり日 (例: 2025-11-28)
+    tag_number=tag_number,          # タグ番号 (例: "00-898")
+    slip_number=slip_number if slip_number else None  # 伝票番号
 ).first()
 
 if existing:
     # 重複データをスキップ
     return 'skipped'
 ```
+
+**注意**: slip_numberがNULLの場合も適切に処理されます。
 
 **メリット**:
 - 同じデータが複数回取り込まれることを防ぐ

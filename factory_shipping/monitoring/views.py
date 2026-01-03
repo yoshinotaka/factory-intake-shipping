@@ -7,7 +7,8 @@ cronジョブの実行状況を確認し、ログファイルを表示する機�
 import logging
 import os
 from datetime import datetime
-from flask import Blueprint, render_template, request, current_app
+from factory_shipping.utils import now_jst
+from flask import Blueprint, render_template, request, current_app, url_for, redirect
 from flask_login import login_required
 
 monitoring_bp = Blueprint('monitoring', __name__)
@@ -28,6 +29,53 @@ CRON_JOBS = [
         'log_file': '/var/www/html/king-req/log_cron/hanjow_downloader.log',
         'error_log_file': None,
         'script': '/var/www/html/king-req/hanjow_csv_downloader.py'
+    },
+    {
+        'name': 'ジャーナルデータ抽出（CSV変換）',
+        'schedule': '毎日 22:50',
+        'log_file': '/var/www/html/king-req/log_cron/extract_journal_data.log',
+        'error_log_file': None,
+        'script': '/var/www/html/king-req/run_extract_journal_data.sh'
+    },
+    {
+        'name': 'ジャーナルデータDB取り込み',
+        'schedule': '毎日 23:00',
+        'log_file': '/var/log/factory-shipping/import-journal.log',
+        'error_log_file': None,
+        'script': '/var/www/html/factory-intake-shipping/run.py'
+    },
+    {
+        'name': 'ジャーナルCSVダウンロード（半蔵）',
+        'schedule': '毎日 22:45',
+        'log_file': '/var/www/html/king-req/log_cron/hanjow_journal_downloader.log',
+        'error_log_file': None,
+        'script': '/var/www/html/king-req/hanjow_journal_downloader.py'
+    },
+    {
+        'name': 'ジャーナルデータDB自動取り込み',
+        'schedule': '毎日 23:00',
+        'log_file': '/var/log/factory-shipping/import-journal.log',
+        'error_log_file': None,
+        'script': '/var/www/html/factory-intake-shipping/run.py import-journal'
+    }
+]
+
+# アプリケーションログの設定
+APP_LOGS = [
+    {
+        'name': 'アプリケーションログ（エラー・警告）',
+        'log_file': '/var/log/factory-shipping/error.log',
+        'description': 'Flaskアプリケーションのエラーログと警告ログ'
+    },
+    {
+        'name': 'アクセスログ',
+        'log_file': '/var/log/factory-shipping/access.log',
+        'description': 'HTTPアクセスログ（Gunicorn）'
+    },
+    {
+        'name': 'hanjow ダウンロード詳細ログ（本日）',
+        'log_file': f'/var/www/html/king-req/log_hanjow/hanjow_downloader_{now_jst().strftime("%Y%m%d")}.log',
+        'description': 'Selenium WebDriverによるCSVダウンロードの詳細ログ'
     }
 ]
 
@@ -126,8 +174,22 @@ def index():
         for job in CRON_JOBS:
             status = check_job_status(job)
             jobs_status.append(status)
-        
-        return render_template('monitoring/index.html', jobs=jobs_status)
+
+        # アプリケーションログの情報を収集
+        app_logs_status = []
+        for log_config in APP_LOGS:
+            log_file = log_config['log_file']
+            log_status = {
+                'name': log_config['name'],
+                'description': log_config['description'],
+                'log_file': log_file,
+                'exists': os.path.exists(log_file),
+                'last_modified': get_file_last_modified(log_file) if os.path.exists(log_file) else None,
+                'size': get_file_size(log_file) if os.path.exists(log_file) else 0
+            }
+            app_logs_status.append(log_status)
+
+        return render_template('monitoring/index.html', jobs=jobs_status, app_logs=app_logs_status)
     except Exception as e:
         logger.error(f"monitoringページエラー: {e}", exc_info=True)
         from flask import flash, redirect, url_for
@@ -247,3 +309,77 @@ def view_error_log(job_index):
         from flask import flash, redirect
         flash(f'エラーが発生しました: {str(e)}', 'error')
         return redirect(url_for('monitoring.index'))
+
+
+@monitoring_bp.route('/app-log/<int:log_index>')
+@login_required
+def view_app_log(log_index):
+    """アプリケーションログファイルの内容を表示（最終200行）"""
+    try:
+        if log_index < 0 or log_index >= len(APP_LOGS):
+            from flask import flash, redirect
+            flash('無効なログインデックスです', 'error')
+            return redirect(url_for('monitoring.index'))
+
+        log_config = APP_LOGS[log_index]
+        log_file = log_config['log_file']
+
+        # ログファイルの存在確認
+        if not os.path.exists(log_file):
+            from flask import flash, redirect
+            flash('ログファイルが見つかりません', 'error')
+            return redirect(url_for('monitoring.index'))
+
+        # ログファイルの最終200行を読み込む
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+                # 最終200行を取得
+                last_lines = lines[-200:] if len(lines) > 200 else lines
+                log_content = ''.join(last_lines)
+        except Exception as e:
+            logger.error(f"ログファイル読み込みエラー: {log_file} - {e}")
+            from flask import flash, redirect
+            flash(f'ログファイルの読み込みに失敗しました: {str(e)}', 'error')
+            return redirect(url_for('monitoring.index'))
+
+        # ファイル情報
+        file_info = {
+            'path': log_file,
+            'size': get_file_size(log_file),
+            'last_modified': get_file_last_modified(log_file),
+            'total_lines': len(lines),
+            'displayed_lines': len(last_lines)
+        }
+
+        # ログ情報（job形式に合わせる）
+        log_info = {
+            'name': log_config['name'],
+            'log_file': log_file,
+            'schedule': log_config.get('description', '')
+        }
+
+        return render_template(
+            'monitoring/log_viewer.html',
+            job=log_info,
+            log_content=log_content,
+            file_info=file_info,
+            is_app_log=True
+        )
+    except Exception as e:
+        logger.error(f"アプリケーションログ表示エラー: {e}", exc_info=True)
+        from flask import flash, redirect
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('monitoring.index'))
+
+
+
+
+
+
+
+
+
+
+
+

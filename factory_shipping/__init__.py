@@ -8,6 +8,8 @@
 from flask import Flask
 from config import get_config
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 
 
 def create_app(config_name=None):
@@ -22,6 +24,12 @@ def create_app(config_name=None):
     """
     # プロジェクトルートを取得（config.pyがあるディレクトリ）
     project_root = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    
+    # .env ファイルを読み込む（プロジェクトルートを明示的に指定）
+    env_file = Path(project_root) / '.env'
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file)
+    
     template_folder = os.path.join(project_root, 'templates')
     static_folder = os.path.join(project_root, 'static')
     
@@ -78,7 +86,11 @@ def register_blueprints(app):
 
     # monitoring機能
     from factory_shipping.monitoring.views import monitoring_bp
-    app.register_blueprint(monitoring_bp, url_prefix='/monitoring')
+    app.register_blueprint(monitoring_bp, url_prefix='/fi/monitoring')
+
+    # 管理者機能
+    from factory_shipping.admin.views import admin_bp
+    app.register_blueprint(admin_bp, url_prefix='/fi/admin')
 
     # ルートパス
     from factory_shipping.views import main_bp
@@ -111,9 +123,25 @@ def register_context_processors(app):
 
     @app.context_processor
     def inject_globals():
+        from factory_shipping.utils import now_jst
+        from factory_shipping.models import FactoryOperator
+        from flask import session
+
+        # セッションから選択された担当者を取得
+        selected_operator = None
+        operator_id = session.get('operator_id')
+        if operator_id:
+            selected_operator = FactoryOperator.query.get(operator_id)
+
+        # アクティブな担当者リストを取得
+        operators = FactoryOperator.query.filter_by(is_active=True).order_by(FactoryOperator.operator_code).all()
+
         return {
             'app_name': '新・出荷システム',
             'version': '1.0.0',
             'min': min,
-            'max': max
+            'max': max,
+            'now': now_jst(),
+            'selected_operator': selected_operator,
+            'all_operators': operators
         }

@@ -1,0 +1,2408 @@
+{% extends "base.html" %}
+
+{% block title %}入荷一覧 - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* base.htmlのフラッシュメッセージを非表示（Ajax通知を使用するため） */
+  body > nav.navbar + .container.mt-3 {
+    display: none !important;
+  }
+
+  .barcode-input {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    border: 2px solid #007bff;
+  }
+  .table-sm td, .table-sm th {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  .shipped-row {
+    background-color: #e9ecef;
+    color: #6c757d;
+  }
+  .sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px !important;
+  }
+  .sortable-header:hover {
+    background-color: #495057 !important;
+  }
+  .sort-icon {
+    position: absolute;
+    right: 5px;
+    opacity: 0.5;
+  }
+  .sort-icon.active {
+    opacity: 1;
+  }
+  .clickable-row {
+    cursor: pointer;
+  }
+  .clickable-row:hover {
+    background-color: #f8f9fa !important;
+  }
+
+  /* 2カラムレイアウト用スタイル */
+  .two-column-layout {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .left-column {
+    flex: 0 0 45%;
+  }
+
+  .right-column {
+    flex: 0 0 55%;
+  }
+
+  /* 固定バナー用スタイル */
+  .fixed-bottom-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  }
+
+  /* バナー用のパディング */
+  body.has-bottom-banner {
+    padding-bottom: 80px;
+  }
+
+  /* 上部フォームのフォントサイズを小さく */
+  .two-column-layout .card-header h5 {
+    font-size: 0.9rem;
+  }
+
+  .two-column-layout .card-body {
+    font-size: 0.85rem;
+  }
+
+  .two-column-layout .form-label {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .two-column-layout .form-control,
+  .two-column-layout .form-select {
+    font-size: 0.85rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  .two-column-layout .btn {
+    font-size: 0.85rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .two-column-layout small {
+    font-size: 0.75rem;
+  }
+
+  /* コンパクトなタイトル */
+  .compact-title {
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+  }
+
+  /* テーブルをスクロール可能に */
+  .scrollable-table .table-responsive {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  /* スクロール時にヘッダー行を固定 */
+  .scrollable-table .table-responsive thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: inherit;
+  }
+
+  /* 出荷ログテーブルのヘッダー背景色 */
+  .scrollable-table .table-responsive .table-primary th {
+    background-color: var(--bs-primary);
+    color: white;
+  }
+
+  /* 入荷データテーブルのヘッダー背景色 */
+  .scrollable-table .table-responsive .table-dark th {
+    background-color: #212529;
+    color: white;
+  }
+
+  /* テーブル全体のフォントサイズを小さく */
+  .scrollable-table table {
+    font-size: 0.75rem;
+  }
+
+  .scrollable-table table th {
+    font-size: 0.7rem;
+    padding: 0.25rem;
+  }
+
+  .scrollable-table table td {
+    font-size: 0.7rem;
+    padding: 0.25rem;
+  }
+
+  /* 出荷ログテーブルの状態ボタンを小さく */
+  .shipment-log-status-btn {
+    font-size: 0.65rem !important;
+    padding: 0.15rem 0.3rem !important;
+    line-height: 1.2;
+  }
+
+  .shipment-log-status-btn i {
+    font-size: 0.65rem;
+  }
+
+  /* ページネーション情報を小さく */
+  .compact-info {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  /* 余白を削減 */
+  .mb-compact {
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* タブレットサイズで画面いっぱいに表示 */
+  @media (min-width: 576px) {
+    .container {
+      max-width: 100% !important;
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+  }
+
+  /* バーコードスキャン待機中の文字を小さく */
+  .barcode-scan-status h5 {
+    font-size: 0.9rem;
+  }
+
+  /* ヘッダー自動非表示機能 */
+  nav.navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1030;
+    transition: transform 0.3s ease-in-out;
+  }
+
+  nav.navbar.header-hidden {
+    transform: translateY(-100%);
+  }
+
+  main.container {
+    transition: margin-top 0.3s ease-in-out;
+  }
+
+  main.container.header-visible {
+    margin-top: 56px;
+  }
+
+  main.container.header-hidden-space {
+    margin-top: 0;
+  }
+
+  /* 設定表示エリアのスタイル */
+  .settings-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .settings-display small {
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+  }
+
+  #edit-settings-btn {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- 2カラムレイアウト -->
+<div class="two-column-layout mb-compact">
+  <!-- 左カラム: 手動入力 -->
+  <div class="left-column">
+    <div class="card border-primary">
+      <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center flex-wrap">
+          <h5 class="mb-0 me-3"><i class="bi bi-pencil-square"></i> 手動入力</h5>
+          <div id="settings-display" class="settings-display" style="display: none;">
+            <small class="me-2"><i class="bi bi-truck"></i> <span id="display-shipping-date">-</span></small>
+            <small class="me-2"><i class="bi bi-person"></i> <span id="display-operator">-</span></small>
+            <small class="me-2"><i class="bi bi-box"></i> <span id="display-packaging">-</span></small>
+          </div>
+        </div>
+        <button id="edit-settings-btn" class="btn btn-sm btn-outline-light" style="display: none;" onclick="showSettingsForm(); return false;">
+          <i class="bi bi-gear"></i> 編集
+        </button>
+      </div>
+      <div class="card-body">
+        <!-- 設定フォーム -->
+        <div id="settings-form-container">
+          <h6 class="mb-3">出荷設定</h6>
+          <div class="mb-2">
+            <label for="shipping_date" class="form-label">出荷便の設定 <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              id="shipping_date"
+              placeholder="YYMMDD (例: 251231)"
+              maxlength="6"
+              pattern="\d{6}"
+              required
+            >
+            <small class="text-muted">※ 6桁の日付（年2桁+月2桁+日2桁）</small>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">担当者の設定 <span class="text-danger">*</span></label>
+            <button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#operatorModal">
+              <i class="bi bi-person-plus"></i> <span id="selected-operator-name">担当者を選択</span>
+            </button>
+            <input type="hidden" id="selected-operator-id">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">包装を設定 <span class="text-danger">*</span></label>
+            <div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="packaging_type" id="packaging_rittai" value="立体" required>
+                <label class="form-check-label" for="packaging_rittai">立体</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="packaging_type" id="packaging_tatami" value="たたみ" required>
+                <label class="form-check-label" for="packaging_tatami">たたみ</label>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-success w-100" onclick="saveSettings(); return false;">
+            <i class="bi bi-check-circle"></i> 設定完了
+          </button>
+        </div>
+
+        <!-- 手動入力フォーム（設定完了後に表示） -->
+        <form method="post" id="manual-form" style="display: none;">
+          <div class="mb-2">
+            <label for="manual_store_code" class="form-label">店舗コード（下2桁） <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              id="manual_store_code_input"
+              placeholder="例: 02"
+              maxlength="2"
+              pattern="\d{2}"
+              autocomplete="off"
+              required
+            >
+            <input type="hidden" id="manual_store_code" name="manual_store_code">
+            <div id="store_name_display" class="mt-1">
+              <small class="text-muted" id="store_name_text">店舗名が表示されます</small>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label for="manual_tag_number" class="form-label">タグ番号 <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              id="manual_tag_number"
+              name="manual_tag_number"
+              placeholder="0123"
+              autocomplete="off"
+              maxlength="4"
+              pattern="\d{1,4}"
+              inputmode="numeric"
+              required
+            >
+            <small class="text-muted">※ 数値のみ（例: 0123）</small>
+          </div>
+          <!-- 包装、出荷便、担当者は設定フォームから自動取得 -->
+          <input type="hidden" id="manual_wrapping" name="manual_wrapping">
+          <input type="hidden" id="manual_shipping_method" name="manual_shipping_method">
+          <input type="hidden" id="manual_operator_id" name="manual_operator_id">
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="bi bi-check-circle"></i> 出荷処理
+          </button>
+          <div class="mt-2">
+            <button class="btn btn-warning w-100" type="button" id="open-status-change-modal-btn" style="display: none;">
+              <i class="bi bi-arrow-left-right"></i> 例外：状態変更
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右カラム: バーコードスキャン + その他 -->
+  <div class="right-column">
+    <!-- バーコードスキャン状態表示 -->
+    <div class="card border-success mb-3">
+      <div class="card-body barcode-scan-status">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-upc-scan me-3" style="font-size: 2rem; color: #28a745;"></i>
+          <div class="flex-grow-1">
+            <h5 class="mb-1"><strong>バーコードスキャン待機中</strong></h5>
+          </div>
+          <div id="barcodeBuffer" class="badge bg-primary" style="font-size: 1.2rem; min-width: 100px;">-</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- バーコード直接入力（折り畳み） -->
+    <div class="card mb-3">
+      <div class="card-header">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#barcodeCollapse" aria-expanded="false" aria-controls="barcodeCollapse">
+          <h5 class="mb-0">
+            <span id="barcodeIcon">▶</span> <i class="bi bi-upc-scan"></i> バーコード直接入力（オプション）
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="barcodeCollapse">
+        <div class="card-body">
+          <form method="post" id="barcode-form">
+            <div class="input-group mb-3">
+              <span class="input-group-text">バーコード</span>
+              <input
+                type="text"
+                class="form-control barcode-input"
+                id="scanned_code"
+                name="scanned_code"
+                placeholder="9桁のバーコードを入力してEnter"
+                autocomplete="off"
+                pattern="[0-9]{9}"
+                maxlength="9"
+              >
+              <button class="btn btn-primary" type="submit">出荷</button>
+            </div>
+            <small class="text-muted">
+              ※ HIDバーコードリーダーから9桁の数値を入力してください（例: 024642123）
+            </small>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- その他の操作（折り畳み） -->
+    <div class="card">
+      <div class="card-header">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#otherOperationsCollapse" aria-expanded="false" aria-controls="otherOperationsCollapse">
+          <h5 class="mb-0">
+            <span id="otherOperationsIcon">▶</span> その他の操作
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="otherOperationsCollapse">
+        <div class="card-body">
+          <!-- 絞り込み検索セクション -->
+          <div class="mb-4">
+            <h6 class="mb-3"><i class="bi bi-search"></i> 絞り込み検索</h6>
+            <form method="get" action="{{ url_for('intake.list_items2') }}">
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label for="store_code" class="form-label">店舗</label>
+                  <select class="form-select form-select-sm" id="store_code" name="store_code">
+                    <option value="">全店舗</option>
+                    {% for store in stores %}
+                    <option value="{{ store.store_code }}" {% if search_params.store_code == store.store_code %}selected{% endif %}>
+                      {{ store.store_code[-2:] }} - {{ store.store_name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="tag_number" class="form-label">タグ番号（開始）</label>
+                  <input type="text" class="form-control form-control-sm" id="tag_number" name="tag_number"
+                         value="{{ search_params.tag_number }}" placeholder="0-000" maxlength="5">
+                </div>
+                <div class="col-md-6">
+                  <label for="date_from" class="form-label">預かり日（From）</label>
+                  <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" value="{{ search_params.date_from }}">
+                </div>
+                <div class="col-md-6">
+                  <label for="date_to" class="form-label">預かり日（To）</label>
+                  <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" value="{{ search_params.date_to }}">
+                </div>
+                <div class="col-md-6">
+                  <label for="status" class="form-label">商品状態</label>
+                  <select class="form-select form-select-sm" id="status" name="status">
+                    <option value="unshipped" {% if search_params.status == 'unshipped' %}selected{% endif %}>未出荷のみ</option>
+                    <option value="all" {% if search_params.status == 'all' %}selected{% endif %}>全て</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="shipping_method" class="form-label">出荷便</label>
+                  <input type="text" class="form-control form-control-sm" id="shipping_method" name="shipping_method"
+                         value="{{ search_params.shipping_method if search_params.shipping_method else '' }}" placeholder="出荷便で検索">
+                </div>
+                <div class="col-md-6">
+                  <label for="per_page" class="form-label">表示件数</label>
+                  <select class="form-select form-select-sm" id="per_page" name="per_page">
+                    <option value="25" {% if search_params.per_page == 25 %}selected{% endif %}>25件</option>
+                    <option value="50" {% if search_params.per_page == 50 %}selected{% endif %}>50件</option>
+                    <option value="100" {% if search_params.per_page == 100 %}selected{% endif %}>100件</option>
+                    <option value="200" {% if search_params.per_page == 200 %}selected{% endif %}>200件</option>
+                  </select>
+                </div>
+                <div class="col-12 text-end">
+                  <button type="submit" class="btn btn-primary btn-sm">検索</button>
+                </div>
+              </div>
+            </form>
+          </div>
+          
+          <!-- 印刷機能セクション -->
+          <div class="pt-3 border-top">
+            <h6 class="mb-3"><i class="bi bi-printer"></i> 印刷機能</h6>
+            <form method="get" action="{{ url_for('intake.list_items2_pdf') }}" target="_blank" id="pdf-form">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-8">
+                  <label for="pdf_shipping_method" class="form-label">納品書PDF生成（出荷便を指定）</label>
+                  <input type="text" class="form-control form-control-sm" id="pdf_shipping_method" name="shipping_method"
+                         placeholder="出荷便を入力（例: 251231）" required>
+                </div>
+                <div class="col-md-4">
+                  <button type="submit" class="btn btn-danger btn-sm w-100">
+                    <i class="bi bi-file-pdf"></i> PDF生成
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手動入力フォームの通知エリア -->
+    <div id="manual-form-notification" class="mt-3" style="display: none;">
+      <div id="manual-form-alert" class="alert alert-dismissible fade show mb-0" role="alert">
+        <span id="manual-form-message"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 出荷ログテーブル -->
+<div class="row mb-compact">
+  <div class="col-12">
+    <div class="compact-title"><i class="bi bi-clock-history"></i> 出荷ログ（最新100件）</div>
+  </div>
+</div>
+
+<div class="row mb-compact">
+  <div class="col-12">
+    <div class="scrollable-table">
+      <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead class="table-primary">
+          <tr>
+            <th>店舗</th>
+            <th>受付日</th>
+            <th>タグNo</th>
+            <th>商名</th>
+            <th>包装</th>
+            <th>出荷便</th>
+            <th>商品状態</th>
+            <th>処理日時</th>
+          </tr>
+        </thead>
+        <tbody id="shipment-logs-tbody">
+          {% if logs %}
+            {% for log in logs %}
+            <tr>
+              {% set store_code_display = '-' %}
+              {% if log.store_code %}
+                {% if log.store_code|length >= 2 %}
+                  {% set store_code_display = log.store_code[-2:] %}
+                {% else %}
+                  {% set store_code_display = log.store_code %}
+                {% endif %}
+              {% endif %}
+              {% set tag_number_formatted = '-' %}
+              {% if log.tag_number %}
+                {% set tag = log.tag_number.replace('-', '') %}
+                {% if tag|length >= 4 %}
+                  {% set tag_number_formatted = tag[1:2] + '-' + tag[2:5] %}
+                {% else %}
+                  {% set tag_number_formatted = log.tag_number %}
+                {% endif %}
+              {% endif %}
+              <td>{{ store_code_display }}</td>
+              <td>{{ log.intake_date.strftime('%Y-%m-%d') if log.intake_date else '-' }}</td>
+              <td><strong>{{ tag_number_formatted }}</strong></td>
+              <td>{{ log.intake_item.product_name if log.intake_item else '-' }}</td>
+              <td>{{ log.intake_item.wrapping if log.intake_item and log.intake_item.wrapping else '-' }}</td>
+              <td>{{ log.intake_item.shipping_method if log.intake_item and log.intake_item.shipping_method else '-' }}</td>
+              <td>
+                {% if log.intake_item and log.new_status and log.new_status.status_code == 'shipped' %}
+                  <button class="btn btn-sm btn-success shipment-log-status-btn"
+                          data-item-id="{{ log.intake_item.id }}"
+                          data-status-code="shipped"
+                          title="クリックで入荷状態に戻す"
+                          style="cursor: pointer;">
+                    <i class="bi bi-arrow-counterclockwise"></i> {{ log.new_status.status_name }}
+                  </button>
+                {% else %}
+                  <span class="badge bg-{% if log.new_status %}{% if log.new_status.status_code == 'received' %}secondary{% elif log.new_status.status_code == 'returned' %}warning{% elif 'trouble' in log.new_status.status_code %}danger{% else %}info{% endif %}{% else %}secondary{% endif %}">
+                    {{ log.new_status.status_name if log.new_status else '不明' }}
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if log.scanned_at %}
+                  {{ log.scanned_at.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted">出荷ログはまだありません</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 入荷テーブルのタイトル -->
+<div class="row mb-compact">
+  <div class="col-12">
+    <div class="compact-title"><i class="bi bi-inbox"></i> 入荷データ</div>
+  </div>
+</div>
+
+<!-- ページネーション情報 -->
+<div class="row mb-compact">
+  <div class="col-12">
+    <p class="compact-info text-muted mb-0">
+      全{{ pagination.total }}件中 {{ pagination.page }}/{{ pagination.pages }}ページ目（{{ (pagination.page - 1) * pagination.per_page + 1 }}〜{{ min(pagination.page * pagination.per_page, pagination.total) }}件表示）
+    </p>
+  </div>
+</div>
+
+<!-- 入荷データテーブル -->
+<div class="row mb-compact">
+  <div class="col-12">
+    <div class="scrollable-table">
+      <div class="table-responsive">
+      <table class="table table-sm table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>店舗</th>
+            <th class="sortable-header" onclick="toggleSort('intake_date')">
+              受付日
+              {% if search_params.sort_by == 'intake_date' %}
+                {% if search_params.sort_order == 'asc' %}
+                  <span class="sort-icon active">▲</span>
+                {% else %}
+                  <span class="sort-icon active">▼</span>
+                {% endif %}
+              {% else %}
+                <span class="sort-icon">⇅</span>
+              {% endif %}
+            </th>
+            <th class="sortable-header" onclick="toggleSort('tag_number')">
+              タグNo
+              {% if search_params.sort_by == 'tag_number' %}
+                {% if search_params.sort_order == 'asc' %}
+                  <span class="sort-icon active">▲</span>
+                {% else %}
+                  <span class="sort-icon active">▼</span>
+                {% endif %}
+              {% else %}
+                <span class="sort-icon">⇅</span>
+              {% endif %}
+            </th>
+            <th>商名</th>
+            <th>包装</th>
+            <th>出荷便</th>
+            <th>商品状態</th>
+            <th>処理日時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if items %}
+            {% for item in items %}
+            <tr class="clickable-row {% if item.status and item.status.status_code == 'shipped' %}shipped-row{% endif %}"
+                data-item-id="{{ item.id }}"
+                title="クリックで履歴を表示">
+              <td>{{ item.store_code[-2:] if item.store_code else '-' }}</td>
+              <td>{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
+              <td><strong>{{ item.get_formatted_tag_number() }}</strong></td>
+              <td>{{ item.product_name or '-' }}</td>
+              <td>{{ item.wrapping or '-' }}</td>
+              <td>{{ item.shipping_method or '-' }}</td>
+              <td>
+                {% if item.status and item.status.status_code == 'shipped' %}
+                  <span class="badge bg-secondary shipment-badge"
+                        data-item-id="{{ item.id }}"
+                        data-status-code="shipped"
+                        style="cursor: pointer;"
+                        title="クリックで入荷状態に戻す">
+                    出荷済み
+                  </span>
+                {% else %}
+                  <span class="badge bg-warning text-dark shipment-badge"
+                        data-item-id="{{ item.id }}"
+                        data-status-code="{{ item.status.status_code if item.status else 'received' }}"
+                        style="cursor: pointer;"
+                        title="クリックで出荷済みにする">
+                    {{ item.status.status_name if item.status else '入荷' }}
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.shipped_at %}
+                  {{ item.shipped_at.strftime('%Y-%m-%d %H:%M') }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted">データがありません</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ページネーション -->
+{% if pagination.pages > 1 %}
+<div class="row">
+  <div class="col-12">
+    <nav aria-label="ページネーション">
+      <ul class="pagination justify-content-center">
+        <!-- 前へ -->
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+          {% if pagination.has_prev %}
+          <a class="page-link" href="{{ url_for('intake.list_items2', page=pagination.prev_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
+            前へ
+          </a>
+          {% else %}
+          <span class="page-link">前へ</span>
+          {% endif %}
+        </li>
+
+        <!-- ページ番号 -->
+        {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+          {% if page_num %}
+            <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+              <a class="page-link" href="{{ url_for('intake.list_items2', page=page_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
+                {{ page_num }}
+              </a>
+            </li>
+          {% else %}
+            <li class="page-item disabled">
+              <span class="page-link">...</span>
+            </li>
+          {% endif %}
+        {% endfor %}
+
+        <!-- 次へ -->
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+          {% if pagination.has_next %}
+          <a class="page-link" href="{{ url_for('intake.list_items2', page=pagination.next_num, store_code=search_params.store_code, tag_number=search_params.tag_number, date_from=search_params.date_from, date_to=search_params.date_to, status=search_params.status, sort_by=search_params.sort_by, sort_order=search_params.sort_order, per_page=search_params.per_page) }}">
+            次へ
+          </a>
+          {% else %}
+          <span class="page-link">次へ</span>
+          {% endif %}
+        </li>
+      </ul>
+    </nav>
+  </div>
+</div>
+{% endif %}
+
+<!-- データ未取得お知らせ（固定バナー） -->
+{% if missing_data and missing_data|length > 0 %}
+<div class="alert alert-warning fixed-bottom-banner" role="alert" id="missingDataBanner">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="flex-grow-1">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>過去7日間のデータ未取得があります（{{ missing_data|length }}件）</strong>
+      </div>
+      <button type="button" class="btn-close" aria-label="Close" onclick="closeBanner()"></button>
+    </div>
+  </div>
+</div>
+
+<!-- 状態変更モーダル -->
+<div class="modal fade" id="statusChangeModal" tabindex="-1" aria-labelledby="statusChangeModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="statusChangeModalLabel">
+          <i class="bi bi-arrow-left-right"></i> 商品状態の変更
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- 検索フォーム -->
+        <div id="status-change-search-form">
+          <div class="mb-3">
+            <label for="sc_store_code" class="form-label">店舗コード（下2桁） <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              id="sc_store_code"
+              placeholder="例: 02"
+              maxlength="2"
+              pattern="\d{2}"
+              autocomplete="off"
+              required
+            >
+          </div>
+          <div class="mb-3">
+            <label for="sc_tag_number" class="form-label">タグ番号 <span class="text-danger">*</span></label>
+            <input
+              type="text"
+              class="form-control"
+              id="sc_tag_number"
+              placeholder="0-123 または 0123"
+              autocomplete="off"
+              maxlength="5"
+              required
+            >
+          </div>
+          <button class="btn btn-primary w-100" type="button" id="search-item-btn">
+            <i class="bi bi-search"></i> 商品を検索
+          </button>
+        </div>
+
+        <!-- 商品情報表示エリア（検索後に表示） -->
+        <div id="status-change-item-info" style="display: none;">
+          <div class="alert alert-info">
+            <h6 class="mb-2"><i class="bi bi-info-circle"></i> 商品情報</h6>
+            <table class="table table-sm table-borderless mb-0">
+              <tr>
+                <th style="width: 120px;">店舗:</th>
+                <td id="sc_item_store"></td>
+              </tr>
+              <tr>
+                <th>受付日:</th>
+                <td id="sc_item_intake_date"></td>
+              </tr>
+              <tr>
+                <th>タグNo:</th>
+                <td id="sc_item_tag_number"></td>
+              </tr>
+              <tr>
+                <th>商品名:</th>
+                <td id="sc_item_product_name"></td>
+              </tr>
+              <tr>
+                <th>顧客名:</th>
+                <td id="sc_item_customer_name"></td>
+              </tr>
+              <tr>
+                <th>現在の状態:</th>
+                <td><strong id="sc_item_current_status"></strong></td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="mb-3">
+            <label for="sc_new_status" class="form-label">変更後の状態 <span class="text-danger">*</span></label>
+            <select class="form-select" id="sc_new_status" required>
+              <option value="">-- 状態を選択してください --</option>
+            </select>
+          </div>
+
+          <button class="btn btn-success w-100" type="button" id="change-status-btn">
+            <i class="bi bi-check-circle"></i> 状態を変更
+          </button>
+        </div>
+
+        <!-- エラーメッセージ表示エリア -->
+        <div id="status-change-error" class="alert alert-danger mt-3" style="display: none;">
+          <i class="bi bi-exclamation-triangle"></i> <span id="status-change-error-message"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // バナー表示時にbodyにクラスを追加
+  document.body.classList.add('has-bottom-banner');
+
+  function closeBanner() {
+    document.getElementById('missingDataBanner').style.display = 'none';
+    document.body.classList.remove('has-bottom-banner');
+  }
+</script>
+{% endif %}
+
+<!-- 履歴モーダル -->
+<div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="historyModalLabel">
+          <i class="bi bi-clock-history"></i> 出荷履歴
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- アイテム情報 -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="card-subtitle mb-2 text-muted">商品情報</h6>
+            <div class="row">
+              <div class="col-md-6">
+                <p class="mb-1"><strong>店舗:</strong> <span id="modal-store-name">-</span></p>
+                <p class="mb-1"><strong>預かり日:</strong> <span id="modal-intake-date">-</span></p>
+                <p class="mb-1"><strong>タグ番号:</strong> <span id="modal-tag-number">-</span></p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-1"><strong>商品名:</strong> <span id="modal-product-name">-</span></p>
+                <p class="mb-1"><strong>顧客名:</strong> <span id="modal-customer-name">-</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 履歴テーブル -->
+        <div id="history-loading" class="text-center py-4">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">読み込み中...</span>
+          </div>
+          <p class="mt-2">履歴を読み込んでいます...</p>
+        </div>
+
+        <div id="history-content" style="display: none;">
+          <h6 class="mb-3">
+            履歴一覧 <span class="badge bg-primary" id="history-count">0</span>件
+          </h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover">
+              <thead class="table-dark">
+                <tr>
+                  <th style="width: 60px;">履歴No.</th>
+                  <th style="width: 150px;">処理日時</th>
+                  <th>変更後の状態</th>
+                  <th>担当者</th>
+                  <th>処理者</th>
+                  <th>備考</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="history-error" class="alert alert-danger" style="display: none;">
+          <i class="bi bi-exclamation-triangle"></i> <span id="history-error-message"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 担当者選択モーダル -->
+<div class="modal fade" id="operatorModal" tabindex="-1" aria-labelledby="operatorModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="operatorModalLabel">
+          <i class="bi bi-person-plus"></i> 担当者を選択
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="list-group">
+          {% if all_operators %}
+            {% for operator in all_operators %}
+            <button type="button" class="list-group-item list-group-item-action operator-select-btn"
+                    data-operator-id="{{ operator.id }}"
+                    data-operator-name="{{ operator.operator_name }}"
+                    data-operator-code="{{ operator.operator_code }}">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">{{ operator.operator_name }}</h6>
+                <small>{{ operator.operator_code }}</small>
+              </div>
+            </button>
+            {% endfor %}
+          {% else %}
+            <div class="alert alert-warning mb-0">
+              <i class="bi bi-exclamation-triangle"></i> 担当者が登録されていません
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ヘッダー自動非表示機能
+  (function() {
+    const navbar = document.querySelector('nav.navbar');
+    const mainContainer = document.querySelector('main.container');
+
+    if (!navbar || !mainContainer) return;
+
+    let lastScrollTop = 0;
+    let isHeaderVisible = true;
+    let autoHideTimer = null;
+
+    // ヘッダーを非表示にする関数
+    function hideHeader() {
+      navbar.classList.add('header-hidden');
+      mainContainer.classList.remove('header-visible');
+      mainContainer.classList.add('header-hidden-space');
+      isHeaderVisible = false;
+      // セッションストレージに状態を保存
+      sessionStorage.setItem('headerHidden', 'true');
+      if (autoHideTimer) {
+        clearTimeout(autoHideTimer);
+        autoHideTimer = null;
+      }
+    }
+
+    // ヘッダーを表示する関数
+    function showHeader() {
+      navbar.classList.remove('header-hidden');
+      mainContainer.classList.remove('header-hidden-space');
+      mainContainer.classList.add('header-visible');
+      isHeaderVisible = true;
+      // セッションストレージに状態を保存
+      sessionStorage.setItem('headerHidden', 'false');
+
+      // 既存のタイマーをクリア
+      if (autoHideTimer) {
+        clearTimeout(autoHideTimer);
+      }
+
+      // 2秒後に自動的に非表示
+      autoHideTimer = setTimeout(function() {
+        hideHeader();
+      }, 2000);
+    }
+
+    // セッションストレージから状態を復元
+    const wasHeaderHidden = sessionStorage.getItem('headerHidden') === 'true';
+
+    if (wasHeaderHidden) {
+      // 前回非表示だった場合は、非表示のまま
+      hideHeader();
+    } else {
+      // 初回または前回表示されていた場合は、表示して2秒後に非表示
+      mainContainer.classList.add('header-visible');
+      autoHideTimer = setTimeout(function() {
+        hideHeader();
+      }, 2000);
+    }
+
+    // スクロールイベント
+    let ticking = false;
+    window.addEventListener('scroll', function() {
+      if (!ticking) {
+        window.requestAnimationFrame(function() {
+          const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+          // 上にスクロール（ヘッダーを表示）
+          if (scrollTop < lastScrollTop && !isHeaderVisible) {
+            showHeader();
+          }
+          // 下にスクロール（ヘッダーを非表示）
+          else if (scrollTop > lastScrollTop && isHeaderVisible && scrollTop > 50) {
+            hideHeader();
+          }
+
+          lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    });
+  })();
+
+  // グローバルバーコードスキャナー検出
+  (function() {
+    let barcodeBuffer = '';
+    let lastKeyTime = Date.now();
+    const scanThreshold = 50;
+    const resetThreshold = 500;
+
+    function convertToHalfWidth(str) {
+      return str.replace(/[０-９]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+      });
+    }
+
+    function isNumericKey(key) {
+      if (key >= '0' && key <= '9') {
+        return true;
+      }
+      if (key >= '０' && key <= '９') {
+        return true;
+      }
+      return false;
+    }
+
+    document.addEventListener('keypress', function(e) {
+      const now = Date.now();
+      const timeDiff = now - lastKeyTime;
+
+      const activeElement = document.activeElement;
+      if (activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT'
+      )) {
+        return;
+      }
+
+      if (isNumericKey(e.key)) {
+        if (timeDiff > resetThreshold) {
+          barcodeBuffer = '';
+        }
+
+        const halfWidthKey = convertToHalfWidth(e.key);
+        barcodeBuffer += halfWidthKey;
+        lastKeyTime = now;
+
+        const bufferDisplay = document.getElementById('barcodeBuffer');
+        if (bufferDisplay) {
+          bufferDisplay.textContent = barcodeBuffer;
+        }
+
+        if (barcodeBuffer.length === 9) {
+          const scannedCode = barcodeBuffer;
+          barcodeBuffer = '';
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '処理中...';
+          }
+          processBarcodeSubmit(scannedCode);
+        } else if (barcodeBuffer.length > 9) {
+          barcodeBuffer = '';
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      } else if (e.key === 'Enter' && barcodeBuffer.length > 0) {
+        if (barcodeBuffer.length === 9) {
+          const scannedCode = barcodeBuffer;
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '処理中...';
+          }
+          processBarcodeSubmit(scannedCode);
+        } else {
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      }
+
+      setTimeout(function() {
+        if (Date.now() - lastKeyTime > 3000) {
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      }, 3000);
+    });
+
+    function processBarcodeSubmit(scannedCode) {
+      console.log('[Ajax] 出荷処理開始:', scannedCode);
+
+      // Ajax送信で出荷処理を実行（ページリロードなし）
+      const formData = new FormData();
+      formData.append('scanned_code', scannedCode);
+
+      // モーダルで設定されている包装、出荷便、担当者の値を取得して送信
+      const wrappingSelect = document.getElementById('manual_wrapping');
+      const shippingMethodSelect = document.getElementById('manual_shipping_method');
+      const operatorSelect = document.getElementById('manual_operator_id');
+
+      if (wrappingSelect && wrappingSelect.value) {
+        formData.append('wrapping', wrappingSelect.value);
+      }
+      if (shippingMethodSelect && shippingMethodSelect.value) {
+        formData.append('shipping_method', shippingMethodSelect.value);
+      }
+      if (operatorSelect && operatorSelect.value) {
+        formData.append('operator_id', operatorSelect.value);
+      }
+
+      fetch('{{ url_for("intake.list_items2") }}', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+      })
+      .then(response => {
+        // バッファをクリア
+        const bufferDisplay = document.getElementById('barcodeBuffer');
+        if (bufferDisplay) {
+          bufferDisplay.textContent = '-';
+        }
+
+        if (!response.ok) {
+          return response.json().then(data => {
+            throw new Error(data.message || '処理に失敗しました');
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.success) {
+          console.log('[Ajax] 出荷処理成功:', data.message);
+          // 成功通知を表示（右側のカラムに表示）
+          showManualFormNotification(data.message, 'success');
+          // Socket.IOが自動的にテーブルを更新する
+        }
+      })
+      .catch(error => {
+        console.error('[Ajax] 出荷処理エラー:', error);
+        showManualFormNotification(error.message || 'エラーが発生しました', 'error');
+      });
+    }
+
+    window.processBarcodeSubmit = processBarcodeSubmit;
+  })();
+
+  // 手動入力フォームの処理
+  document.addEventListener('DOMContentLoaded', function() {
+    function convertToHalfWidth(str) {
+      return str.replace(/[０-９]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+      });
+    }
+
+    const manualForm = document.getElementById('manual-form');
+    if (manualForm) {
+      const tagInput = document.getElementById('manual_tag_number');
+      if (tagInput) {
+        tagInput.addEventListener('input', function(e) {
+          let value = e.target.value;
+          value = convertToHalfWidth(value);
+          const numericValue = value.replace(/[^0-9]/g, '');
+          if (e.target.value !== numericValue) {
+            e.target.value = numericValue;
+          }
+        });
+
+        tagInput.addEventListener('paste', function(e) {
+          e.preventDefault();
+          let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+          pastedText = convertToHalfWidth(pastedText);
+          const numericText = pastedText.replace(/[^0-9]/g, '');
+          document.execCommand('insertText', false, numericText);
+        });
+      }
+
+      manualForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const storeCode = document.getElementById('manual_store_code').value;
+        const tagNumber = document.getElementById('manual_tag_number').value;
+
+        if (!storeCode || !tagNumber) {
+          alert('店舗コードとタグ番号を入力してください');
+          return;
+        }
+
+        if (tagNumber.length !== 4 || !/^\d{4}$/.test(tagNumber)) {
+          alert('タグ番号は4桁の数値で入力してください');
+          return;
+        }
+
+        const storeCode3 = storeCode.substring(1, 4);
+        const check1 = storeCode.charAt(3);
+        const check2 = tagNumber.charAt(0);
+        const barcode = storeCode3 + check1 + tagNumber + check2;
+
+        window.processBarcodeSubmit(barcode);
+      });
+    }
+  });
+
+  // ソート切り替え関数
+  function toggleSort(column) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentSortBy = urlParams.get('sort_by') || 'intake_date';
+    const currentSortOrder = urlParams.get('sort_order') || 'asc';
+
+    if (currentSortBy === column) {
+      urlParams.set('sort_order', currentSortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      urlParams.set('sort_by', column);
+      urlParams.set('sort_order', 'asc');
+    }
+
+    urlParams.set('page', '1');
+    window.location.search = urlParams.toString();
+  }
+
+  // バーコード直接入力フォーム送信時の処理
+  const barcodeForm = document.getElementById('barcode-form');
+  if (barcodeForm) {
+    barcodeForm.addEventListener('submit', function(e) {
+      e.preventDefault(); // ページリロードを防ぐ
+
+      const input = document.getElementById('scanned_code');
+      if (input && input.value) {
+        const scannedCode = input.value.trim();
+
+        // processBarcodeSubmit関数を使用してAjax送信
+        window.processBarcodeSubmit(scannedCode);
+
+        // 入力欄をクリア
+        input.value = '';
+      }
+    });
+  }
+
+  // バーコード入力欄の全角→半角変換と数字制限
+  const barcodeInput = document.getElementById('scanned_code');
+  if (barcodeInput) {
+    function convertToHalfWidth(str) {
+      return str.replace(/[０-９]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+      });
+    }
+
+    barcodeInput.addEventListener('input', function(e) {
+      let value = e.target.value;
+      value = convertToHalfWidth(value);
+      const numericValue = value.replace(/[^0-9]/g, '');
+      if (e.target.value !== numericValue) {
+        e.target.value = numericValue;
+      }
+    });
+
+    barcodeInput.addEventListener('paste', function(e) {
+      e.preventDefault();
+      let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+      pastedText = convertToHalfWidth(pastedText);
+      const numericText = pastedText.replace(/[^0-9]/g, '');
+      document.execCommand('insertText', false, numericText);
+    });
+  }
+
+  // 折りたたみアイコンの切り替え
+  document.addEventListener('DOMContentLoaded', function() {
+    const barcodeCollapseElement = document.getElementById('barcodeCollapse');
+    const barcodeIconElement = document.getElementById('barcodeIcon');
+
+    if (barcodeCollapseElement && barcodeIconElement) {
+      barcodeCollapseElement.addEventListener('show.bs.collapse', function() {
+        barcodeIconElement.textContent = '▼';
+        setTimeout(function() {
+          const input = document.getElementById('scanned_code');
+          if (input) {
+            input.focus();
+          }
+        }, 350);
+      });
+
+      barcodeCollapseElement.addEventListener('hide.bs.collapse', function() {
+        barcodeIconElement.textContent = '▶';
+      });
+    }
+
+    const otherOperationsCollapseElement = document.getElementById('otherOperationsCollapse');
+    const otherOperationsIconElement = document.getElementById('otherOperationsIcon');
+
+    if (otherOperationsCollapseElement && otherOperationsIconElement) {
+      otherOperationsCollapseElement.addEventListener('show.bs.collapse', function() {
+        otherOperationsIconElement.textContent = '▼';
+      });
+
+      otherOperationsCollapseElement.addEventListener('hide.bs.collapse', function() {
+        otherOperationsIconElement.textContent = '▶';
+      });
+    }
+
+    const tagNumberInput = document.getElementById('tag_number');
+    if (tagNumberInput) {
+      function convertToHalfWidth(str) {
+        return str.replace(/[０-９]/g, function(s) {
+          return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
+        });
+      }
+
+      tagNumberInput.addEventListener('input', function(e) {
+        let value = e.target.value;
+        value = convertToHalfWidth(value);
+        value = value.replace(/[^0-9]/g, '');
+
+        if (value.length > 4) {
+          value = value.substring(0, 4);
+        }
+
+        if (value.length > 1) {
+          value = value.charAt(0) + '-' + value.substring(1);
+        }
+
+        e.target.value = value;
+      });
+
+      tagNumberInput.addEventListener('paste', function(e) {
+        e.preventDefault();
+        let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+        pastedText = convertToHalfWidth(pastedText);
+        let value = pastedText.replace(/[^0-9]/g, '');
+
+        if (value.length > 4) {
+          value = value.substring(0, 4);
+        }
+
+        if (value.length > 1) {
+          value = value.charAt(0) + '-' + value.substring(1);
+        }
+
+        e.target.value = value;
+      });
+    }
+  });
+
+  // 出荷状態のトグル
+  document.addEventListener('DOMContentLoaded', function() {
+    const badges = document.querySelectorAll('.shipment-badge');
+    badges.forEach(function(badge) {
+      badge.addEventListener('click', function() {
+        const itemId = this.getAttribute('data-item-id');
+        const statusCode = this.getAttribute('data-status-code');
+
+        const originalText = this.textContent;
+        this.textContent = '処理中...';
+        this.style.opacity = '0.6';
+        this.style.pointerEvents = 'none';
+
+        const url = `/fi/intake/toggle-shipment/${itemId}`;
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            if (data.status_code === 'shipped') {
+              this.className = 'badge bg-secondary shipment-badge';
+              this.textContent = '出荷済み';
+              this.setAttribute('data-status-code', 'shipped');
+              this.setAttribute('title', 'クリックで入荷状態に戻す');
+              this.closest('tr').classList.add('shipped-row');
+            } else {
+              this.className = 'badge bg-warning text-dark shipment-badge';
+              this.textContent = data.status_name || '入荷';
+              this.setAttribute('data-status-code', data.status_code || 'received');
+              this.setAttribute('title', 'クリックで出荷済みにする');
+              this.closest('tr').classList.remove('shipped-row');
+            }
+
+            const shippedAtCell = this.closest('tr').querySelector('td:last-child');
+            if (shippedAtCell) {
+              shippedAtCell.textContent = data.shipped_at || '-';
+            }
+          } else {
+            alert('エラー: ' + data.message);
+            this.textContent = originalText;
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('エラーが発生しました。ページを再読み込みしてください。');
+          this.textContent = originalText;
+        })
+        .finally(() => {
+          this.style.opacity = '1';
+          this.style.pointerEvents = 'auto';
+        });
+      });
+    });
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightTag = urlParams.get('highlight_tag');
+
+    if (highlightTag) {
+      urlParams.delete('highlight_tag');
+      const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+      window.history.replaceState({}, '', newUrl);
+
+      setTimeout(function() {
+        const rows = document.querySelectorAll('tbody tr');
+        let targetRow = null;
+
+        for (let i = 0; i < rows.length; i++) {
+          const tagCell = rows[i].querySelector('td:nth-child(3)');
+          if (tagCell) {
+            const tagText = tagCell.textContent.trim();
+            if (tagText === highlightTag) {
+              targetRow = rows[i];
+              break;
+            }
+          }
+        }
+
+        if (targetRow) {
+          targetRow.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+
+          const originalBgColor = targetRow.style.backgroundColor;
+          targetRow.style.transition = 'background-color 0.3s ease';
+          targetRow.style.backgroundColor = '#fff3cd';
+
+          setTimeout(function() {
+            targetRow.style.backgroundColor = originalBgColor;
+            setTimeout(function() {
+              targetRow.style.transition = '';
+            }, 1000);
+          }, 2000);
+        }
+      }, 300);
+    }
+  });
+
+  // レコードクリックで履歴モーダルを表示
+  document.addEventListener('DOMContentLoaded', function() {
+    const clickableRows = document.querySelectorAll('.clickable-row');
+    const historyModal = new bootstrap.Modal(document.getElementById('historyModal'));
+
+    clickableRows.forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        if (e.target.classList.contains('shipment-badge')) {
+          return;
+        }
+
+        const itemId = this.getAttribute('data-item-id');
+        if (!itemId) return;
+
+        showHistoryModal(itemId);
+      });
+    });
+
+    function showHistoryModal(itemId) {
+      document.getElementById('history-loading').style.display = 'block';
+      document.getElementById('history-content').style.display = 'none';
+      document.getElementById('history-error').style.display = 'none';
+      document.getElementById('history-table-body').innerHTML = '';
+
+      historyModal.show();
+
+      fetch(`/fi/intake/${itemId}/history`)
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById('history-loading').style.display = 'none';
+
+          if (data.success) {
+            document.getElementById('modal-store-name').textContent =
+              `${data.item.store_code} - ${data.item.store_name || '-'}`;
+            document.getElementById('modal-intake-date').textContent =
+              data.item.intake_date || '-';
+            document.getElementById('modal-tag-number').textContent =
+              data.item.formatted_tag_number || '-';
+            document.getElementById('modal-product-name').textContent =
+              data.item.product_name || '-';
+            document.getElementById('modal-customer-name').textContent =
+              data.item.customer_name || '-';
+
+            document.getElementById('history-count').textContent = data.total_count;
+
+            const tbody = document.getElementById('history-table-body');
+
+            if (data.history.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">履歴がありません</td></tr>';
+            } else {
+              data.history.forEach(function(log) {
+                const tr = document.createElement('tr');
+
+                let badgeClass = 'bg-secondary';
+                if (log.new_status.status_code === 'shipped') {
+                  badgeClass = 'bg-success';
+                } else if (log.new_status.status_code === 'received') {
+                  badgeClass = 'bg-secondary';
+                } else if (log.new_status.status_code === 'returned') {
+                  badgeClass = 'bg-warning';
+                } else if (log.new_status.status_code && log.new_status.status_code.includes('trouble')) {
+                  badgeClass = 'bg-danger';
+                } else {
+                  badgeClass = 'bg-info';
+                }
+
+                tr.innerHTML = `
+                  <td class="text-center">${log.history_number || '-'}</td>
+                  <td>${log.scanned_at || '-'}</td>
+                  <td><span class="badge ${badgeClass}">${log.new_status.status_name}</span></td>
+                  <td>${log.operator_name || '-'}</td>
+                  <td>${log.scanned_by || '-'}</td>
+                  <td>${log.notes || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+              });
+            }
+
+            document.getElementById('history-content').style.display = 'block';
+          } else {
+            document.getElementById('history-error-message').textContent =
+              data.message || '履歴の取得に失敗しました';
+            document.getElementById('history-error').style.display = 'block';
+          }
+        })
+        .catch(error => {
+          console.error('履歴取得エラー:', error);
+          document.getElementById('history-loading').style.display = 'none';
+          document.getElementById('history-error-message').textContent =
+            'ネットワークエラーが発生しました';
+          document.getElementById('history-error').style.display = 'block';
+        });
+    }
+
+    // Socket.IOでリアルタイム更新を受信
+    const socket = io({ path: '/fi/socket.io' });
+
+    socket.on('connect', function() {
+      console.log('Socket.IO接続成功');
+    });
+
+    socket.on('shipment_updated', function(data) {
+      console.log('[Socket.IO] 出荷更新イベント受信:', {
+        item_id: data.item_id,
+        store_code: data.store_code,
+        tag_number: data.tag_number,
+        status_name: data.status_name
+      });
+
+      // 1. 出荷ログテーブル（上の表）に新しい行を追加
+      const logsTbody = document.getElementById('shipment-logs-tbody');
+      if (logsTbody) {
+        // 店舗コードの下2桁を取得
+        let storeCodeDisplay = '-';
+        if (data.store_code) {
+          storeCodeDisplay = data.store_code.length >= 2 ? data.store_code.slice(-2) : data.store_code;
+        }
+
+        // ステータスバッジのクラスを決定
+        let badgeClass = 'bg-secondary';
+        if (data.status_code === 'shipped') {
+          badgeClass = 'bg-success';
+        } else if (data.status_code === 'received') {
+          badgeClass = 'bg-secondary';
+        } else if (data.status_code === 'returned') {
+          badgeClass = 'bg-warning';
+        } else if (data.status_code && data.status_code.includes('trouble')) {
+          badgeClass = 'bg-danger';
+        } else {
+          badgeClass = 'bg-info';
+        }
+
+        // 新しい行を作成
+        const newRow = document.createElement('tr');
+
+        // 商品状態のHTML（出荷済みの場合はボタン、それ以外はバッジ）
+        let statusHtml = '';
+        if (data.status_code === 'shipped' && data.item_id) {
+          statusHtml = `
+            <button class="btn btn-sm btn-success shipment-log-status-btn"
+                    data-item-id="${data.item_id}"
+                    data-status-code="shipped"
+                    title="クリックで入荷状態に戻す"
+                    style="cursor: pointer;">
+              <i class="bi bi-arrow-counterclockwise"></i> ${data.status_name || '出荷済み'}
+            </button>
+          `;
+        } else {
+          statusHtml = `<span class="badge ${badgeClass}">${data.status_name || '不明'}</span>`;
+        }
+
+        newRow.innerHTML = `
+          <td>${storeCodeDisplay}</td>
+          <td>${data.intake_date || '-'}</td>
+          <td><strong>${data.formatted_tag_number || data.tag_number || '-'}</strong></td>
+          <td>${data.product_name || '-'}</td>
+          <td>${data.wrapping || '-'}</td>
+          <td>${data.shipping_method || '-'}</td>
+          <td>${statusHtml}</td>
+          <td>${data.shipped_at_short || '-'}</td>
+        `;
+
+        // 新しい行をハイライト
+        newRow.style.backgroundColor = '#ffffcc';
+        setTimeout(function() {
+          newRow.style.backgroundColor = '';
+        }, 3000);
+
+        // テーブルの先頭に挿入
+        if (logsTbody.firstChild) {
+          logsTbody.insertBefore(newRow, logsTbody.firstChild);
+        } else {
+          logsTbody.appendChild(newRow);
+        }
+
+        // 「データがありません」行がある場合は削除
+        const noDataRow = logsTbody.querySelector('td[colspan="8"]');
+        if (noDataRow) {
+          noDataRow.closest('tr').remove();
+        }
+
+        // 100件を超えたら最後の行を削除
+        const allRows = logsTbody.querySelectorAll('tr');
+        if (allRows.length > 100) {
+          logsTbody.removeChild(allRows[allRows.length - 1]);
+        }
+      }
+
+      // 2. 入荷データテーブル（下の表）の該当行を更新
+      const rows = document.querySelectorAll('tbody tr[data-item-id]');
+      rows.forEach(function(row) {
+        const itemId = row.getAttribute('data-item-id');
+        if (itemId == data.item_id) {
+          const badge = row.querySelector('.shipment-badge');
+          if (badge) {
+            badge.className = 'badge shipment-badge';
+            if (data.status_code === 'shipped') {
+              badge.classList.add('bg-secondary');
+              badge.textContent = '出荷済み';
+              badge.setAttribute('data-status-code', 'shipped');
+              badge.setAttribute('title', 'クリックで入荷状態に戻す');
+              row.classList.add('shipped-row');
+            } else if (data.status_code === 'received') {
+              badge.classList.add('bg-warning', 'text-dark');
+              badge.textContent = '入荷';
+              badge.setAttribute('data-status-code', 'received');
+              badge.setAttribute('title', 'クリックで出荷済みにする');
+              row.classList.remove('shipped-row');
+            } else {
+              badge.classList.add('bg-secondary');
+              badge.textContent = data.status_name || '不明';
+              badge.setAttribute('data-status-code', data.status_code || '');
+              row.classList.remove('shipped-row');
+            }
+          }
+
+          const shippedAtCell = row.querySelector('td:last-child');
+          if (shippedAtCell && data.shipped_at_short) {
+            shippedAtCell.textContent = data.shipped_at_short;
+          }
+
+          row.style.backgroundColor = '#ffffcc';
+          setTimeout(function() {
+            row.style.backgroundColor = '';
+          }, 2000);
+        }
+      });
+
+      // Socket.IO更新後もフォーカスを維持
+      setTimeout(function() {
+        const tagInput = document.getElementById('manual_tag_number');
+        const manualForm = document.getElementById('manual-form');
+        // 手動入力フォームが表示されている場合のみフォーカスを戻す
+        if (tagInput && manualForm && manualForm.style.display !== 'none') {
+          tagInput.focus();
+          console.log('Socket.IO更新後にフォーカスを復元しました');
+        }
+      }, 50);
+    });
+
+    socket.on('disconnect', function() {
+      console.log('Socket.IO切断');
+    });
+
+    // 出荷ログテーブルの状態ボタンクリックイベント（イベント委譲）
+    document.addEventListener('click', function(e) {
+      // shipment-log-status-btnクラスを持つボタンがクリックされた場合
+      if (e.target.closest('.shipment-log-status-btn')) {
+        const button = e.target.closest('.shipment-log-status-btn');
+        const itemId = button.getAttribute('data-item-id');
+        const statusCode = button.getAttribute('data-status-code');
+
+        if (!itemId) {
+          console.error('item_idが見つかりません');
+          return;
+        }
+
+        console.log('[出荷ログ] 状態変更ボタンクリック:', { item_id: itemId, status_code: statusCode });
+
+        // ボタンを一時的に無効化
+        button.disabled = true;
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i> 処理中...';
+
+        // 状態をトグル（出荷済み→入荷）
+        const url = `/fi/intake/toggle-shipment/${itemId}`;
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log('[出荷ログ] 状態変更成功:', data);
+            showManualFormNotification(`状態を「${data.status_name}」に変更しました`, 'success');
+
+            // ボタンをバッジに置き換える（入荷状態に戻ったので）
+            const badgeClass = data.status_code === 'received' ? 'bg-secondary' : 'bg-info';
+            const badge = document.createElement('span');
+            badge.className = `badge ${badgeClass}`;
+            badge.textContent = data.status_name || '入荷';
+            button.parentNode.replaceChild(badge, button);
+
+            // Socket.IOが自動的に入荷データテーブル（下の表）を更新する
+          } else {
+            alert('エラー: ' + data.message);
+            // ボタンを元に戻す
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+          }
+        })
+        .catch(error => {
+          console.error('[出荷ログ] 状態変更エラー:', error);
+          alert('エラーが発生しました。ページを再読み込みしてください。');
+          // ボタンを元に戻す
+          button.disabled = false;
+          button.innerHTML = originalHtml;
+        });
+      }
+    });
+
+    // 担当者選択モーダル - データ属性を使ったイベントリスナー
+    document.querySelectorAll('.operator-select-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const operatorId = this.getAttribute('data-operator-id');
+        const operatorName = this.getAttribute('data-operator-name');
+        const operatorCode = this.getAttribute('data-operator-code');
+        selectOperator(operatorId, operatorName, operatorCode);
+      });
+    });
+
+    // 担当者選択モーダルのキーボードナビゲーション
+    const operatorModal = document.getElementById('operatorModal');
+    if (operatorModal) {
+      operatorModal.addEventListener('shown.bs.modal', function() {
+        const buttons = operatorModal.querySelectorAll('.operator-select-btn');
+        if (buttons.length > 0) {
+          buttons[0].focus();
+        }
+      });
+
+      operatorModal.addEventListener('keydown', function(e) {
+        const buttons = Array.from(operatorModal.querySelectorAll('.operator-select-btn'));
+        const currentIndex = buttons.indexOf(document.activeElement);
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const nextIndex = (currentIndex + 1) % buttons.length;
+          buttons[nextIndex].focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prevIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+          buttons[prevIndex].focus();
+        } else if (e.key === 'Enter' && currentIndex !== -1) {
+          e.preventDefault();
+          buttons[currentIndex].click();
+        }
+      });
+    }
+  });
+
+  // 担当者選択関数
+  function selectOperator(operatorId, operatorName, operatorCode) {
+    document.getElementById('selected-operator-id').value = operatorId;
+    document.getElementById('selected-operator-name').textContent = operatorName + ' (' + operatorCode + ')';
+
+    // ヘッダーの担当者も連動して設定
+    if (typeof setOperator === 'function') {
+      setOperator(operatorId, operatorName);
+    }
+
+    // モーダルを閉じる
+    const modal = bootstrap.Modal.getInstance(document.getElementById('operatorModal'));
+    if (modal) {
+      modal.hide();
+    }
+  }
+
+  // 設定を保存
+  function saveSettings() {
+    const shippingDate = document.getElementById('shipping_date').value;
+    const operatorId = document.getElementById('selected-operator-id').value;
+    const operatorName = document.getElementById('selected-operator-name').textContent;
+    const packagingType = document.querySelector('input[name="packaging_type"]:checked');
+
+    // バリデーション
+    if (!shippingDate || shippingDate.length !== 6 || !/^\d{6}$/.test(shippingDate)) {
+      alert('出荷便の設定を正しく入力してください（6桁の数字）');
+      return;
+    }
+
+    if (!operatorId) {
+      alert('担当者を選択してください');
+      return;
+    }
+
+    if (!packagingType) {
+      alert('包装を選択してください');
+      return;
+    }
+
+    // 設定をlocalStorageに保存
+    const settings = {
+      shippingDate: shippingDate,
+      operatorId: operatorId,
+      operatorName: operatorName,
+      packagingType: packagingType.value
+    };
+    localStorage.setItem('manualInputSettings', JSON.stringify(settings));
+
+    // 表示を更新
+    document.getElementById('display-shipping-date').textContent = shippingDate;
+    document.getElementById('display-operator').textContent = operatorName;
+    document.getElementById('display-packaging').textContent = packagingType.value;
+
+    // 手動入力フォームのhiddenフィールドに値を設定
+    document.getElementById('manual_wrapping').value = packagingType.value;
+    document.getElementById('manual_shipping_method').value = shippingDate;
+    document.getElementById('manual_operator_id').value = operatorId;
+
+    // 設定表示エリアと編集ボタンを表示
+    document.getElementById('settings-display').style.display = 'flex';
+    document.getElementById('edit-settings-btn').style.display = 'block';
+
+    // 設定フォームを非表示、手動入力フォームを表示
+    document.getElementById('settings-form-container').style.display = 'none';
+    document.getElementById('manual-form').style.display = 'block';
+  }
+
+  // 設定フォームを再表示
+  function showSettingsForm() {
+    document.getElementById('settings-form-container').style.display = 'block';
+    document.getElementById('manual-form').style.display = 'none';
+  }
+
+  // ページ読み込み時に保存された設定を復元
+  document.addEventListener('DOMContentLoaded', function() {
+    const savedSettings = localStorage.getItem('manualInputSettings');
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+
+        // フォームに値を設定
+        document.getElementById('shipping_date').value = settings.shippingDate;
+        document.getElementById('selected-operator-id').value = settings.operatorId;
+        document.getElementById('selected-operator-name').textContent = settings.operatorName;
+
+        // ラジオボタンを選択
+        const radioBtn = document.querySelector('input[name="packaging_type"][value="' + settings.packagingType + '"]');
+        if (radioBtn) {
+          radioBtn.checked = true;
+        }
+
+        // 表示を更新
+        document.getElementById('display-shipping-date').textContent = settings.shippingDate;
+        document.getElementById('display-operator').textContent = settings.operatorName;
+        document.getElementById('display-packaging').textContent = settings.packagingType;
+
+        // 手動入力フォームのhiddenフィールドに値を設定
+        document.getElementById('manual_wrapping').value = settings.packagingType;
+        document.getElementById('manual_shipping_method').value = settings.shippingDate;
+        document.getElementById('manual_operator_id').value = settings.operatorId;
+
+        // 設定表示エリアと編集ボタンを表示
+        document.getElementById('settings-display').style.display = 'flex';
+        document.getElementById('edit-settings-btn').style.display = 'block';
+
+        // 設定フォームを非表示、手動入力フォームを表示
+        document.getElementById('settings-form-container').style.display = 'none';
+        document.getElementById('manual-form').style.display = 'block';
+      } catch (e) {
+        console.error('設定の復元に失敗しました:', e);
+      }
+    }
+
+    // 店舗コード入力欄の復元
+    const savedStoreCode = localStorage.getItem('manualStoreCode');
+    if (savedStoreCode) {
+      document.getElementById('manual_store_code_input').value = savedStoreCode;
+      // 店舗名を更新
+      updateStoreName(savedStoreCode);
+    }
+
+    // 初回表示時にタグ番号入力欄にフォーカス
+    setTimeout(function() {
+      const tagInput = document.getElementById('manual_tag_number');
+      const manualForm = document.getElementById('manual-form');
+      if (tagInput && manualForm && manualForm.style.display !== 'none') {
+        tagInput.focus();
+      }
+    }, 300);
+  });
+
+  // ページ読み込み完了時にフォーカスを設定
+  window.addEventListener('load', function() {
+    const manualForm = document.getElementById('manual-form');
+    const tagInput = document.getElementById('manual_tag_number');
+
+    if (manualForm && tagInput && manualForm.style.display !== 'none') {
+      setTimeout(function() {
+        tagInput.focus();
+      }, 100);
+    }
+  });
+
+  // 店舗マッピング（Jinja2から生成）
+  const storeMapping = {
+    {% for store in stores %}
+    "{{ store.store_code[-2:] }}": {
+      code: "{{ store.store_code }}",
+      name: "{{ store.store_name }}"
+    }{{ "," if not loop.last else "" }}
+    {% endfor %}
+  };
+
+  // 店舗コード入力欄のイベントリスナー
+  const storeCodeInput = document.getElementById('manual_store_code_input');
+  if (storeCodeInput) {
+    storeCodeInput.addEventListener('input', function() {
+      const value = this.value;
+      updateStoreName(value);
+
+      // localStorageに保存
+      if (value.length === 2 && /^\d{2}$/.test(value)) {
+        localStorage.setItem('manualStoreCode', value);
+      }
+    });
+  }
+
+  // 店舗名を更新する関数
+  function updateStoreName(storeCode2Digits) {
+    const storeNameText = document.getElementById('store_name_text');
+    const hiddenStoreCode = document.getElementById('manual_store_code');
+
+    if (storeCode2Digits.length === 2 && /^\d{2}$/.test(storeCode2Digits)) {
+      const storeInfo = storeMapping[storeCode2Digits];
+      if (storeInfo) {
+        storeNameText.textContent = storeInfo.name;
+        storeNameText.className = 'text-success fw-bold';
+        hiddenStoreCode.value = storeInfo.code;
+      } else {
+        storeNameText.textContent = '該当する店舗が見つかりません';
+        storeNameText.className = 'text-danger';
+        hiddenStoreCode.value = '';
+      }
+    } else {
+      storeNameText.textContent = '店舗名が表示されます';
+      storeNameText.className = 'text-muted';
+      hiddenStoreCode.value = '';
+    }
+  }
+
+  // 手動入力フォームの通知を表示する関数
+  let notificationTimer = null; // タイマーを保存するグローバル変数
+
+  function showManualFormNotification(message, type) {
+    console.log('[通知] メッセージ表示:', { message: message, type: type });
+
+    const notification = document.getElementById('manual-form-notification');
+    const alert = document.getElementById('manual-form-alert');
+    const messageSpan = document.getElementById('manual-form-message');
+
+    // 前のタイマーをクリア（二重表示を防ぐ）
+    if (notificationTimer) {
+      console.log('[通知] 前のタイマーをクリア');
+      clearTimeout(notificationTimer);
+      notificationTimer = null;
+    }
+
+    // アラートのクラスを設定（success, warning, danger）
+    alert.className = 'alert alert-dismissible fade show mb-0';
+    if (type === 'success') {
+      alert.classList.add('alert-success');
+    } else if (type === 'warning') {
+      alert.classList.add('alert-warning');
+    } else if (type === 'error') {
+      alert.classList.add('alert-danger');
+    } else {
+      alert.classList.add('alert-info');
+    }
+
+    messageSpan.textContent = message;
+    notification.style.display = 'block';
+
+    // 3秒後に自動的に非表示
+    notificationTimer = setTimeout(function() {
+      notification.style.display = 'none';
+      notificationTimer = null;
+    }, 3000);
+  }
+
+  // フォーム送信時のAjax処理
+  const manualForm = document.getElementById('manual-form');
+  if (manualForm) {
+    let isSubmitting = false; // 送信中フラグ
+
+    manualForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      // 二重送信防止
+      if (isSubmitting) {
+        console.log('送信中のため、処理をスキップしました');
+        return false;
+      }
+
+      const hiddenStoreCode = document.getElementById('manual_store_code');
+      const tagNumberInput = document.getElementById('manual_tag_number');
+
+      if (!hiddenStoreCode.value) {
+        showManualFormNotification('正しい店舗コードを入力してください', 'error');
+        return false;
+      }
+
+      // 送信開始
+      isSubmitting = true;
+
+      // フォームデータを収集
+      const formData = new FormData();
+      formData.append('manual_store_code', hiddenStoreCode.value);
+      formData.append('manual_tag_number', tagNumberInput.value);
+
+      // 包装と出荷便を追加
+      const wrappingInput = document.getElementById('manual_wrapping');
+      const shippingMethodInput = document.getElementById('manual_shipping_method');
+      if (wrappingInput && wrappingInput.value) {
+        formData.append('manual_wrapping', wrappingInput.value);
+      }
+      if (shippingMethodInput && shippingMethodInput.value) {
+        formData.append('manual_shipping_method', shippingMethodInput.value);
+      }
+
+      // 担当者IDを追加（ページ上部で選択された担当者）
+      const operatorSelect = document.getElementById('operator_id');
+      if (operatorSelect && operatorSelect.value) {
+        formData.append('operator_id', operatorSelect.value);
+      }
+
+      // Ajax送信
+      fetch(window.location.pathname, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+      })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(data => {
+            throw new Error(data.message || '処理に失敗しました');
+          });
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.success) {
+          showManualFormNotification(data.message, 'success');
+          // 成功時はタグ番号をクリアしてフォーカスを戻す
+          tagNumberInput.value = '';
+          // Socket.IOがテーブルを自動更新するのを待つ（リロードしない）
+        }
+
+        // フォーカスをタグ番号入力欄に戻す（即座に）
+        tagNumberInput.focus();
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showManualFormNotification(error.message || 'エラーが発生しました', 'error');
+        tagNumberInput.focus();
+      })
+      .finally(() => {
+        isSubmitting = false; // 送信完了
+      });
+
+      return false;
+    });
+  }
+
+  // ============================================================
+  // 状態変更モーダル制御
+  // ============================================================
+
+  // モーダルインスタンスを保持
+  let statusChangeModal = null;
+  let currentSearchedItemId = null;
+
+  // 手動入力フォームが表示されたら、状態変更ボタンも表示
+  const manualFormObserver = new MutationObserver(function(mutations) {
+    const manualForm = document.getElementById('manual-form');
+    const statusChangeBtn = document.getElementById('open-status-change-modal-btn');
+
+    if (manualForm && statusChangeBtn) {
+      if (manualForm.style.display !== 'none') {
+        statusChangeBtn.style.display = 'block';
+      } else {
+        statusChangeBtn.style.display = 'none';
+      }
+    }
+  });
+
+  const manualFormElement = document.getElementById('manual-form');
+  if (manualFormElement) {
+    manualFormObserver.observe(manualFormElement, {
+      attributes: true,
+      attributeFilter: ['style']
+    });
+  }
+
+  // 「例外：状態変更」ボタンのクリックイベント
+  document.getElementById('open-status-change-modal-btn').addEventListener('click', function() {
+    // Bootstrapモーダルを初期化
+    if (!statusChangeModal) {
+      statusChangeModal = new bootstrap.Modal(document.getElementById('statusChangeModal'));
+    }
+
+    // モーダルをリセット
+    resetStatusChangeModal();
+
+    // 手動入力フォームの値を自動入力（店舗コードとタグ番号）
+    const storeCodeInput = document.getElementById('manual_store_code_input');
+    const tagNumberInput = document.getElementById('manual_tag_number');
+
+    if (storeCodeInput && storeCodeInput.value) {
+      document.getElementById('sc_store_code').value = storeCodeInput.value;
+    }
+
+    if (tagNumberInput && tagNumberInput.value) {
+      document.getElementById('sc_tag_number').value = tagNumberInput.value;
+    }
+
+    // モーダルを開く
+    statusChangeModal.show();
+
+    // フォーカスを店舗コードに設定
+    setTimeout(() => {
+      document.getElementById('sc_store_code').focus();
+    }, 500);
+  });
+
+  // モーダルをリセット
+  function resetStatusChangeModal() {
+    document.getElementById('sc_store_code').value = '';
+    document.getElementById('sc_tag_number').value = '';
+    document.getElementById('status-change-search-form').style.display = 'block';
+    document.getElementById('status-change-item-info').style.display = 'none';
+    document.getElementById('status-change-error').style.display = 'none';
+    currentSearchedItemId = null;
+  }
+
+  // 「商品を検索」ボタンのクリックイベント
+  document.getElementById('search-item-btn').addEventListener('click', function() {
+    const storeCode = document.getElementById('sc_store_code').value.trim();
+    const tagNumber = document.getElementById('sc_tag_number').value.trim();
+
+    // バリデーション
+    if (!storeCode || !tagNumber) {
+      showStatusChangeError('店舗コードとタグ番号を入力してください');
+      return;
+    }
+
+    // エラーメッセージをクリア
+    document.getElementById('status-change-error').style.display = 'none';
+
+    // ボタンを無効化
+    const btn = document.getElementById('search-item-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 検索中...';
+
+    // 店舗コードを完全な形式に変換（storesデータから検索）
+    const storeSelect = document.getElementById('manual_store_code_input');
+    const fullStoreCode = document.getElementById('manual_store_code').value || storeCode;
+
+    // 商品を検索
+    fetch('{{ url_for("intake.search_item") }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        store_code: fullStoreCode,
+        tag_number: tagNumber
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // 商品情報を表示
+        displayItemInfo(data.item, data.statuses);
+      } else {
+        showStatusChangeError(data.message || '商品の検索に失敗しました');
+      }
+    })
+    .catch(error => {
+      console.error('商品検索エラー:', error);
+      showStatusChangeError('商品の検索中にエラーが発生しました');
+    })
+    .finally(() => {
+      // ボタンを有効化
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search"></i> 商品を検索';
+    });
+  });
+
+  // 商品情報を表示
+  function displayItemInfo(item, statuses) {
+    currentSearchedItemId = item.id;
+
+    // 商品情報を設定
+    document.getElementById('sc_item_store').textContent =
+      `${item.store_code.slice(-2)} - ${item.store_name || ''}`;
+    document.getElementById('sc_item_intake_date').textContent = item.intake_date || '-';
+    document.getElementById('sc_item_tag_number').textContent = item.formatted_tag_number || item.tag_number;
+    document.getElementById('sc_item_product_name').textContent = item.product_name || '-';
+    document.getElementById('sc_item_customer_name').textContent = item.customer_name || '-';
+    document.getElementById('sc_item_current_status').textContent = item.status_name || '未設定';
+
+    // 状態選択ドロップダウンを更新
+    const statusSelect = document.getElementById('sc_new_status');
+    statusSelect.innerHTML = '<option value="">-- 状態を選択してください --</option>';
+
+    statuses.forEach(function(status) {
+      const option = document.createElement('option');
+      option.value = status.id;
+      option.textContent = status.status_name;
+
+      // 現在の状態は選択不可にする
+      if (status.id === item.status_id) {
+        option.disabled = true;
+        option.textContent += ' (現在の状態)';
+      }
+
+      statusSelect.appendChild(option);
+    });
+
+    // 検索フォームを非表示、商品情報を表示
+    document.getElementById('status-change-search-form').style.display = 'none';
+    document.getElementById('status-change-item-info').style.display = 'block';
+  }
+
+  // 「状態を変更」ボタンのクリックイベント
+  document.getElementById('change-status-btn').addEventListener('click', function() {
+    const newStatusId = document.getElementById('sc_new_status').value;
+
+    if (!newStatusId) {
+      showStatusChangeError('変更後の状態を選択してください');
+      return;
+    }
+
+    if (!currentSearchedItemId) {
+      showStatusChangeError('商品情報が見つかりません。もう一度検索してください。');
+      return;
+    }
+
+    // エラーメッセージをクリア
+    document.getElementById('status-change-error').style.display = 'none';
+
+    // ボタンを無効化
+    const btn = document.getElementById('change-status-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 変更中...';
+
+    // 状態を変更
+    fetch(`/fi/intake/change-item-status/${currentSearchedItemId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        status_id: newStatusId
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // 成功メッセージを表示
+        showManualFormNotification(data.message, 'success');
+
+        // モーダルを閉じる
+        statusChangeModal.hide();
+
+        // Socket.IOが自動的にテーブルを更新する
+      } else {
+        showStatusChangeError(data.message || '状態の変更に失敗しました');
+      }
+    })
+    .catch(error => {
+      console.error('状態変更エラー:', error);
+      showStatusChangeError('状態の変更中にエラーが発生しました');
+    })
+    .finally(() => {
+      // ボタンを有効化
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check-circle"></i> 状態を変更';
+    });
+  });
+
+  // エラーメッセージを表示
+  function showStatusChangeError(message) {
+    document.getElementById('status-change-error-message').textContent = message;
+    document.getElementById('status-change-error').style.display = 'block';
+  }
+
+  // モーダルが閉じられたときにリセット
+  document.getElementById('statusChangeModal').addEventListener('hidden.bs.modal', function() {
+    resetStatusChangeModal();
+  });
+</script>
+{% endblock %}

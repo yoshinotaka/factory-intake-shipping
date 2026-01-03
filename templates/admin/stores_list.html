@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}店舗管理 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>店舗管理</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">ダッシュボードに戻る</a>
+        <a href="{{ url_for('admin.stores_create') }}" class="btn btn-success">新規店舗作成</a>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>店舗コード</th>
+                <th>店舗名</th>
+                <th>アクティブ</th>
+                <th>作成日時</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for store in stores.items %}
+            <tr>
+                <td>{{ store.id }}</td>
+                <td>{{ store.store_code }}</td>
+                <td>{{ store.store_name }}</td>
+                <td>
+                    {% if store.is_active %}
+                        <span class="badge bg-success">有効</span>
+                    {% else %}
+                        <span class="badge bg-warning">無効</span>
+                    {% endif %}
+                </td>
+                <td>{{ store.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <a href="{{ url_for('admin.stores_edit', store_id=store.id) }}" class="btn btn-sm btn-warning">編集</a>
+                    <form method="POST" action="{{ url_for('admin.stores_delete', store_id=store.id) }}" style="display: inline;" onsubmit="return confirm('本当に削除しますか？関連データがある場合は削除できません。');">
+                        <button type="submit" class="btn btn-sm btn-danger">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- ページネーション -->
+{% if stores.pages > 1 %}
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        {% if stores.has_prev %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin.stores_list', page=stores.prev_num) }}">前へ</a>
+        </li>
+        {% endif %}
+
+        {% for page_num in stores.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+            {% if page_num %}
+                {% if page_num == stores.page %}
+                <li class="page-item active"><a class="page-link" href="#">{{ page_num }}</a></li>
+                {% else %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('admin.stores_list', page=page_num) }}">{{ page_num }}</a></li>
+                {% endif %}
+            {% else %}
+                <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+            {% endif %}
+        {% endfor %}
+
+        {% if stores.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin.stores_list', page=stores.next_num) }}">次へ</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

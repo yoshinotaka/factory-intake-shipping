@@ -9,6 +9,7 @@ from factory_shipping.extensions import db
 from flask_login import UserMixin
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from factory_shipping.utils import now_jst
 
 
 class User(UserMixin, db.Model):
@@ -18,12 +19,16 @@ class User(UserMixin, db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    is_store_staff = db.Column(db.Boolean, default=False, nullable=False)
+    is_factory_staff = db.Column(db.Boolean, default=False, nullable=False)
+    is_shift_staff = db.Column(db.Boolean, default=False, nullable=False)
+    is_office_staff = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
 
     def set_password(self, password):
         """パスワードをハッシュ化して保存"""
@@ -46,8 +51,8 @@ class Store(db.Model):
     store_code = db.Column(db.String(10), unique=True, nullable=False, index=True)
     store_name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
 
     # リレーション
     intake_items = db.relationship('IntakeItem', backref='store', lazy='dynamic')
@@ -57,8 +62,37 @@ class Store(db.Model):
         return f'<Store {self.store_code}: {self.store_name}>'
 
 
+class ItemStatus(db.Model):
+    """商品状態マスタ
+
+    商品の状態を管理するマスタテーブル。
+    状態は柔軟に追加・変更できるようにデータベースで管理。
+    """
+
+    __tablename__ = 'item_statuses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    status_code = db.Column(db.String(50), unique=True, nullable=False, index=True)  # コード（例: 'received', 'shipped'）
+    status_name = db.Column(db.String(100), nullable=False)  # 表示名（例: '入荷', '出荷済'）
+    description = db.Column(db.String(200), nullable=True)  # 説明
+    display_order = db.Column(db.Integer, nullable=False, default=0)  # 表示順序
+    is_active = db.Column(db.Boolean, default=True, nullable=False)  # 有効/無効
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
+
+    # リレーション
+    intake_items = db.relationship('IntakeItem', foreign_keys='IntakeItem.status_id', backref='status', lazy='dynamic')
+    shipment_logs = db.relationship('ShipmentLog', foreign_keys='ShipmentLog.new_status_id', lazy='dynamic')
+
+    def __repr__(self):
+        return f'<ItemStatus {self.status_code}: {self.status_name}>'
+
+
 class IntakeItem(db.Model):
-    """入荷データ（CSV取り込み元）"""
+    """入荷データ（CSV取り込み元）= 商品テーブル
+
+    各商品の現在の状態を保持し、状態変更履歴はShipmentLogで管理する。
+    """
 
     __tablename__ = 'intake_items'
 
@@ -84,9 +118,9 @@ class IntakeItem(db.Model):
     intake_date = db.Column(db.Date, nullable=False, index=True)  # 預かり日（重要：検索・ソートのキー）
     scheduled_date = db.Column(db.Date, nullable=True, index=True)  # 出荷予定日（将来用）
 
-    # 出荷状態
-    is_shipped = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    shipped_at = db.Column(db.DateTime, nullable=True)  # 出荷日時
+    # 現在の状態（最新のShipmentLogの状態と一致）
+    status_id = db.Column(db.Integer, db.ForeignKey('item_statuses.id'), nullable=True, index=True)
+    shipped_at = db.Column(db.DateTime, nullable=True)  # 最新の状態変更日時
 
     # 入荷状態（通常、工場請求中、完了済み、など）
     intake_status = db.Column(db.String(20), default='通常', nullable=False, index=True)
@@ -96,10 +130,14 @@ class IntakeItem(db.Model):
     item_name = db.Column(db.String(200), nullable=True)  # 旧: product_name のエイリアス
     quantity = db.Column(db.Integer, nullable=False, default=1)  # 数量（通常は1）
 
+    # 包装・出荷便情報
+    wrapping = db.Column(db.String(100), nullable=True)  # 包装
+    shipping_method = db.Column(db.String(100), nullable=True)  # 出荷便
+
     notes = db.Column(db.Text, nullable=True)  # 備考
     imported_at = db.Column(db.DateTime, nullable=True, index=True)  # CSV取り込み日時
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
 
     # リレーション
     shipment_logs = db.relationship('ShipmentLog', backref='intake_item', lazy='dynamic')
@@ -120,24 +158,44 @@ class IntakeItem(db.Model):
 
 
 class ShipmentLog(db.Model):
-    """出荷ログ（スキャン履歴）"""
+    """出荷ログ（状態変更履歴）
+
+    商品の状態変更履歴を記録する。
+    各レコードは状態変更を表し、最新のレコードの状態が商品の現在の状態と一致する。
+    """
 
     __tablename__ = 'shipment_logs'
 
     id = db.Column(db.Integer, primary_key=True)
     intake_item_id = db.Column(db.Integer, db.ForeignKey('intake_items.id'), nullable=False, index=True)
     store_id = db.Column(db.Integer, db.ForeignKey('stores.id'), nullable=False, index=True)
+
+    # 複合キー（店舗コード + 預かり日 + タグ番号）
+    store_code = db.Column(db.String(20), nullable=True, index=True)  # 店舗コード
+    intake_date = db.Column(db.Date, nullable=True, index=True)  # 預かり日
+    tag_number = db.Column(db.String(20), nullable=True, index=True)  # タグ番号
+    history_number = db.Column(db.Integer, nullable=True)  # 履歴番号（同じ商品の何回目の変更か）
+
     scanned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    scanned_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
-    scanned_code = db.Column(db.String(100), nullable=False)
+    operator_id = db.Column(db.Integer, db.ForeignKey('factory_operators.id'), nullable=True, index=True)  # 担当者ID
+    scanned_at = db.Column(db.DateTime, default=now_jst, nullable=False, index=True)
+    scanned_code = db.Column(db.String(100), nullable=True)  # バーコード（手動変更の場合はNULL）
+
+    # 状態変更
+    new_status_id = db.Column(db.Integer, db.ForeignKey('item_statuses.id'), nullable=True, index=True)  # 変更後の状態
+
+    # 後方互換性のため残す
     status = db.Column(db.String(20), default='completed', nullable=False)  # completed, error など
-    notes = db.Column(db.Text, nullable=True)
+
+    notes = db.Column(db.Text, nullable=True)  # 備考・理由
 
     # リレーション
     scanned_by = db.relationship('User', backref='shipment_logs')
+    operator = db.relationship('FactoryOperator', backref='shipment_logs')
+    new_status = db.relationship('ItemStatus', foreign_keys=[new_status_id])
 
     def __repr__(self):
-        return f'<ShipmentLog {self.scanned_code} at {self.scanned_at}>'
+        return f'<ShipmentLog Item#{self.intake_item_id} at {self.scanned_at}>'
 
 
 class DelayedItem(db.Model):
@@ -151,11 +209,55 @@ class DelayedItem(db.Model):
     expected_date = db.Column(db.Date, nullable=True)
     resolved = db.Column(db.Boolean, default=False, nullable=False, index=True)
     resolved_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
 
     # リレーション
     intake_item = db.relationship('IntakeItem', backref='delayed_items')
 
     def __repr__(self):
         return f'<DelayedItem {self.intake_item_id}: {self.delay_reason}>'
+
+
+class FactoryOperator(db.Model):
+    """工場担当者マスター
+
+    工場の従業員（担当者）を管理する。
+    ログインユーザーとは別に、実際に出荷作業を行う担当者を記録する。
+    """
+
+    __tablename__ = 'factory_operators'
+
+    id = db.Column(db.Integer, primary_key=True)
+    operator_code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    operator_name = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
+
+    def __repr__(self):
+        return f'<FactoryOperator {self.operator_code}: {self.operator_name}>'
+
+
+class JournalData(db.Model):
+    """ジャーナルデータ
+
+    日次でCSVからインポートされるジャーナルデータを管理する。
+    顧客情報や伝票情報を記録し、検索・分析に使用する。
+    """
+
+    __tablename__ = 'journal_data'
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)  # 日付
+    store_no = db.Column(db.String(10), nullable=False, index=True)  # 店舗番号
+    slip_no = db.Column(db.String(20), nullable=False, index=True)  # 伝票番号
+    customer_name = db.Column(db.String(100), nullable=True, index=True)  # 顧客名
+    phone = db.Column(db.String(20), nullable=True)  # 電話番号
+    slip_content = db.Column(db.Text, nullable=True)  # 伝票内容
+    imported_at = db.Column(db.DateTime, nullable=False)  # インポート日時
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
+
+    def __repr__(self):
+        return f'<JournalData {self.date} {self.store_no}/{self.slip_no}: {self.customer_name}>'

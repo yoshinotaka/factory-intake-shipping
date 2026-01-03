@@ -1,0 +1,708 @@
+{% extends "base.html" %}
+
+{% block title %}出荷処理 - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .barcode-input {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    border: 2px solid #007bff;
+  }
+  .table-sm td, .table-sm th {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  /* 入力セクションのスムーズなトランジション */
+  #scannerCol, #manualInputCol, #barcodeInputCol {
+    transition: all 0.3s ease-in-out;
+    opacity: 1;
+  }
+
+  #scannerCol.fade-out, #manualInputCol.fade-out, #barcodeInputCol.fade-out {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h1>出荷処理</h1>
+  </div>
+</div>
+
+<!-- 入力セクション（3列表示、展開時は1列） -->
+<div class="row mb-3" id="inputSectionsRow">
+  <!-- バーコードスキャン -->
+  <div class="col-md-4" id="scannerCol">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#scannerCollapse" aria-expanded="false" aria-controls="scannerCollapse">
+          <h5 class="mb-0">
+            <span id="scannerIcon">▶</span> <i class="bi bi-upc-scan"></i> バーコードスキャン
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="scannerCollapse">
+        <div class="card-body">
+          <div class="alert alert-success d-flex align-items-center mb-0" role="alert">
+            <i class="bi bi-upc-scan me-2" style="font-size: 1.5rem;"></i>
+            <div class="flex-grow-1">
+              <strong>スキャン待機中</strong>
+              <div class="mt-2">
+                <span class="text-muted">バッファ:</span>
+                <span id="barcodeBuffer" class="badge bg-primary ms-2" style="font-size: 1.2rem; min-width: 100px;">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 手動入力（店舗コード + タグ番号） -->
+  <div class="col-md-4" id="manualInputCol">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#manualCollapse" aria-expanded="false" aria-controls="manualCollapse">
+          <h5 class="mb-0">
+            <span id="manualIcon">▶</span> <i class="bi bi-pencil-square"></i> 手動入力
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="manualCollapse">
+        <div class="card-body">
+          <form method="post" id="manual-form">
+            <input type="hidden" name="filter_store" value="{{ filter_store }}">
+            <input type="hidden" name="filter_tag" value="{{ filter_tag }}">
+            <input type="hidden" name="filter_product" value="{{ filter_product }}">
+            <input type="hidden" name="filter_status" value="{{ filter_status }}">
+            <input type="hidden" name="show_latest_only" value="{{ show_latest_only }}">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="manual_store_code" class="form-label">店舗コード <span class="text-danger">*</span></label>
+                <select class="form-select" id="manual_store_code" name="manual_store_code" required>
+                  <option value="">選択してください</option>
+                  {% for store in stores %}
+                  <option value="{{ store.store_code }}">{{ store.store_code[-2:] }} - {{ store.store_name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="manual_tag_number" class="form-label">タグ番号 <span class="text-danger">*</span></label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="manual_tag_number"
+                  name="manual_tag_number"
+                  placeholder="0-123 または 0123"
+                  autocomplete="off"
+                  maxlength="5"
+                  required
+                >
+                <small class="text-muted">※ 表に表示されているタグ番号を入力（例: 0-123、0123）</small>
+              </div>
+              <div class="col-md-4 d-flex align-items-end">
+                <button class="btn btn-primary w-100" type="submit">
+                  <i class="bi bi-check-circle"></i> 出荷処理
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- バーコード直接入力 -->
+  <div class="col-md-4" id="barcodeInputCol">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#barcodeCollapse" aria-expanded="false" aria-controls="barcodeCollapse">
+          <h5 class="mb-0">
+            <span id="barcodeIcon">▶</span> <i class="bi bi-upc-scan"></i> バーコード直接入力
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="barcodeCollapse">
+        <div class="card-body">
+          <form method="post" id="barcode-form">
+            <input type="hidden" name="filter_store" value="{{ filter_store }}">
+            <input type="hidden" name="filter_tag" value="{{ filter_tag }}">
+            <input type="hidden" name="filter_product" value="{{ filter_product }}">
+            <input type="hidden" name="filter_status" value="{{ filter_status }}">
+            <input type="hidden" name="show_latest_only" value="{{ show_latest_only }}">
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <div class="input-group">
+                  <span class="input-group-text">バーコード</span>
+                  <input
+                    type="text"
+                    class="form-control barcode-input"
+                    id="scanned_code"
+                    name="scanned_code"
+                    placeholder="9桁のバーコードを入力してEnter"
+                    autocomplete="off"
+                    pattern="[0-9]{9}"
+                    maxlength="9"
+                  >
+                </div>
+              </div>
+              <div class="col-md-4">
+                <select class="form-select" id="operator_id" name="operator_id">
+                  <option value="">担当者を選択...</option>
+                  {% for operator in operators %}
+                  <option value="{{ operator.id }}">{{ operator.operator_name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12">
+                <button class="btn btn-primary w-100" type="submit">
+                  <i class="bi bi-upc-scan"></i> 出荷処理
+                </button>
+              </div>
+            </div>
+            <small class="text-muted">
+              ※ HIDバーコードリーダーから9桁の数値を入力してください（例: 024642123）
+            </small>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 出荷ログ一覧 -->
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="d-flex justify-content-between align-items-center">
+      <h4><i class="bi bi-clock-history"></i> 出荷ログ</h4>
+      <div class="btn-group" role="group">
+        <a href="{{ url_for('shipping.process', show_latest_only='false') }}"
+           class="btn btn-sm {% if not show_latest_only %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          <i class="bi bi-list-ul"></i> 全ログ表示
+        </a>
+        <a href="{{ url_for('shipping.process', show_latest_only='true') }}"
+           class="btn btn-sm {% if show_latest_only %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          <i class="bi bi-star"></i> 最新のみ表示
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 絞り込みフォーム -->
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <button class="btn btn-link text-dark text-decoration-none p-0 w-100 text-start" type="button"
+                data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false" aria-controls="filterCollapse">
+          <h5 class="mb-0">
+            <span id="filterIcon">▶</span> <i class="bi bi-funnel"></i> 絞り込み検索
+          </h5>
+        </button>
+      </div>
+      <div class="collapse" id="filterCollapse">
+        <div class="card-body">
+          <form method="get" id="filter-form">
+            <input type="hidden" name="show_latest_only" value="{{ show_latest_only }}">
+            <div class="row g-3">
+              <div class="col-md-2">
+                <label for="filter_store" class="form-label">店舗</label>
+                <input type="text" class="form-control" id="filter_store" name="filter_store"
+                       value="{{ filter_store }}" placeholder="店舗コード">
+              </div>
+              <div class="col-md-2">
+                <label for="filter_tag" class="form-label">タグ番号</label>
+                <input type="text" class="form-control" id="filter_tag" name="filter_tag"
+                       value="{{ filter_tag }}" placeholder="タグ番号">
+              </div>
+              <div class="col-md-3">
+                <label for="filter_product" class="form-label">商品名</label>
+                <input type="text" class="form-control" id="filter_product" name="filter_product"
+                       value="{{ filter_product }}" placeholder="商品名">
+              </div>
+              <div class="col-md-3">
+                <label for="filter_status" class="form-label">変更後の状態</label>
+                <select class="form-select" id="filter_status" name="filter_status">
+                  <option value="">すべて</option>
+                  {% for status in statuses %}
+                  <option value="{{ status.id }}" {% if filter_status == status.id|string %}selected{% endif %}>
+                    {{ status.status_name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100 me-1" type="submit">
+                  <i class="bi bi-search"></i> 絞り込み
+                </button>
+                <a href="{{ url_for('shipping.process') }}" class="btn btn-secondary">
+                  <i class="bi bi-x-circle"></i>
+                </a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead class="table-primary">
+          <tr>
+            <th style="width: 80px;">店舗</th>
+            <th style="width: 100px;">タグ番号</th>
+            <th style="width: 110px;">受付日</th>
+            <th>商品名</th>
+            <th style="width: 120px;">変更後の状態</th>
+            <th style="width: 100px;">担当者</th>
+            <th>備考</th>
+            <th style="width: 150px;">処理日時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if logs %}
+            {% for log in logs %}
+            <tr>
+              {% set store_code_display = '-' %}
+              {% if log.store_code %}
+                {% if log.store_code|length >= 2 %}
+                  {% set store_code_display = log.store_code[-2:] %}
+                {% else %}
+                  {% set store_code_display = log.store_code %}
+                {% endif %}
+              {% endif %}
+              {% set tag_number_formatted = '-' %}
+              {% if log.tag_number %}
+                {% set tag = log.tag_number.replace('-', '') %}
+                {% if tag|length >= 4 %}
+                  {% set tag_number_formatted = tag[1:2] + '-' + tag[2:5] %}
+                {% else %}
+                  {% set tag_number_formatted = log.tag_number %}
+                {% endif %}
+              {% endif %}
+              <td>{{ store_code_display }}</td>
+              <td><strong>{{ tag_number_formatted }}</strong></td>
+              <td>{{ log.intake_date.strftime('%Y-%m-%d') if log.intake_date else '-' }}</td>
+              <td>{{ log.intake_item.product_name if log.intake_item else '-' }}</td>
+              <td>
+                <span class="badge bg-{% if log.new_status %}{% if log.new_status.status_code == 'shipped' %}success{% elif log.new_status.status_code == 'received' %}secondary{% elif log.new_status.status_code == 'returned' %}warning{% elif 'trouble' in log.new_status.status_code %}danger{% else %}info{% endif %}{% else %}secondary{% endif %}">
+                  {{ log.new_status.status_name if log.new_status else '不明' }}
+                </span>
+              </td>
+              <td>{{ log.operator.operator_name if log.operator else '-' }}</td>
+              <td>{{ log.notes or '-' }}</td>
+              <td>{{ log.scanned_at.strftime('%Y-%m-%d %H:%M:%S') if log.scanned_at else '-' }}</td>
+
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted">出荷ログはまだありません</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // グローバルバーコードスキャナー検出
+  (function() {
+    let barcodeBuffer = '';
+    let lastKeyTime = Date.now();
+    const scanThreshold = 50;
+
+    document.addEventListener('keypress', function(e) {
+      const now = Date.now();
+      const timeDiff = now - lastKeyTime;
+
+      // アクティブな要素が入力欄の場合はスキップ
+      const activeElement = document.activeElement;
+      if (activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT'
+      )) {
+        return;
+      }
+
+      // 数字キーのみ受け付け
+      if (e.key >= '0' && e.key <= '9') {
+        if (timeDiff > 100) {
+          barcodeBuffer = '';
+        }
+        barcodeBuffer += e.key;
+        lastKeyTime = now;
+
+        // バッファ表示を更新
+        const bufferDisplay = document.getElementById('barcodeBuffer');
+        if (bufferDisplay) {
+          bufferDisplay.textContent = barcodeBuffer;
+        }
+
+        // 9桁に達したらバーコードとして処理
+        if (barcodeBuffer.length === 9) {
+          const scannedCode = barcodeBuffer;
+          barcodeBuffer = '';
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '処理中...';
+          }
+          processBarcodeSubmit(scannedCode);
+        } else if (barcodeBuffer.length > 9) {
+          barcodeBuffer = '';
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      } else if (e.key === 'Enter' && barcodeBuffer.length > 0) {
+        if (barcodeBuffer.length === 9) {
+          const scannedCode = barcodeBuffer;
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '処理中...';
+          }
+          processBarcodeSubmit(scannedCode);
+        } else {
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      }
+
+      // 3秒後にバッファをリセット
+      setTimeout(function() {
+        if (Date.now() - lastKeyTime > 3000) {
+          barcodeBuffer = '';
+          const bufferDisplay = document.getElementById('barcodeBuffer');
+          if (bufferDisplay) {
+            bufferDisplay.textContent = '-';
+          }
+        }
+      }, 3000);
+    });
+
+    // バーコード送信処理
+    function processBarcodeSubmit(scannedCode) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+
+      // 現在のURLパラメータを保持
+      const urlParams = new URLSearchParams(window.location.search);
+      let action = '{{ url_for("shipping.process") }}';
+      if (urlParams.toString()) {
+        action += '?' + urlParams.toString();
+      }
+      form.action = action;
+
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'scanned_code';
+      input.value = scannedCode;
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    // グローバルスコープに登録
+    window.processBarcodeSubmit = processBarcodeSubmit;
+  })();
+
+  // 手動入力フォームの処理
+  document.addEventListener('DOMContentLoaded', function() {
+    const manualForm = document.getElementById('manual-form');
+    if (manualForm) {
+      // タグ番号入力の数字制限
+      const tagInput = document.getElementById('manual_tag_number');
+      if (tagInput) {
+        tagInput.addEventListener('input', function(e) {
+          const value = e.target.value;
+          const numericValue = value.replace(/[^0-9]/g, '');
+          if (value !== numericValue) {
+            e.target.value = numericValue;
+          }
+        });
+      }
+
+      manualForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const storeCode = document.getElementById('manual_store_code').value;
+        let tagNumber = document.getElementById('manual_tag_number').value;
+
+        if (!storeCode || !tagNumber) {
+          alert('店舗コードとタグ番号を入力してください');
+          return;
+        }
+
+        // ハイフンを除去
+        tagNumber = tagNumber.replace('-', '');
+
+        if (tagNumber.length !== 4) {
+          alert('タグ番号は4桁で入力してください');
+          return;
+        }
+
+        // バーコード生成（NW-7形式、9桁）
+        const storeCode3 = storeCode.substring(1, 4);
+        const check1 = storeCode.charAt(3);
+        const check2 = tagNumber.charAt(0);
+        const barcode = storeCode3 + check1 + tagNumber + check2;
+
+        console.log('店舗:', storeCode, '→', storeCode3);
+        console.log('タグ:', tagNumber);
+        console.log('バーコード:', barcode);
+
+        // バーコード送信
+        window.processBarcodeSubmit(barcode);
+      });
+    }
+  });
+
+  // バーコード直接入力フォーム送信時の処理
+  const barcodeForm = document.getElementById('barcode-form');
+  if (barcodeForm) {
+    barcodeForm.addEventListener('submit', function() {
+      setTimeout(function() {
+        const input = document.getElementById('scanned_code');
+        if (input) {
+          input.value = '';
+        }
+      }, 100);
+    });
+  }
+
+  // バーコード入力欄の半角数字制限
+  const barcodeInput = document.getElementById('scanned_code');
+  if (barcodeInput) {
+    barcodeInput.addEventListener('input', function(e) {
+      const value = e.target.value;
+      const numericValue = value.replace(/[^0-9]/g, '');
+      if (value !== numericValue) {
+        e.target.value = numericValue;
+      }
+    });
+
+    barcodeInput.addEventListener('paste', function(e) {
+      e.preventDefault();
+      const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+      const numericText = pastedText.replace(/[^0-9]/g, '');
+      document.execCommand('insertText', false, numericText);
+    });
+  }
+
+  // 入力セクションの折りたたみとレイアウト制御
+  document.addEventListener('DOMContentLoaded', function() {
+    const scannerCol = document.getElementById('scannerCol');
+    const manualInputCol = document.getElementById('manualInputCol');
+    const barcodeInputCol = document.getElementById('barcodeInputCol');
+
+    const scannerCollapse = document.getElementById('scannerCollapse');
+    const manualCollapse = document.getElementById('manualCollapse');
+    const barcodeCollapse = document.getElementById('barcodeCollapse');
+
+    const scannerIcon = document.getElementById('scannerIcon');
+    const manualIcon = document.getElementById('manualIcon');
+    const barcodeIcon = document.getElementById('barcodeIcon');
+
+    // レイアウトを更新する関数（スムーズなアニメーション付き）
+    function updateInputLayout(expandingCol) {
+      const scannerExpanded = scannerCollapse && scannerCollapse.classList.contains('show');
+      const manualExpanded = manualCollapse && manualCollapse.classList.contains('show');
+      const barcodeExpanded = barcodeCollapse && barcodeCollapse.classList.contains('show');
+
+      // いずれかが展開されている場合、展開されているカードは col-12、他は非表示
+      if (scannerExpanded || manualExpanded || barcodeExpanded) {
+        if (scannerExpanded) {
+          // 他のカードをフェードアウト
+          if (manualInputCol) {
+            manualInputCol.classList.add('fade-out');
+          }
+          if (barcodeInputCol) {
+            barcodeInputCol.classList.add('fade-out');
+          }
+
+          // トランジション完了後にレイアウト変更
+          setTimeout(function() {
+            if (scannerCol) {
+              scannerCol.className = 'col-12';
+              scannerCol.classList.remove('col-md-4', 'fade-out');
+            }
+            if (manualInputCol) {
+              manualInputCol.className = 'd-none';
+              manualInputCol.classList.remove('fade-out');
+            }
+            if (barcodeInputCol) {
+              barcodeInputCol.className = 'd-none';
+              barcodeInputCol.classList.remove('fade-out');
+            }
+          }, 300);
+        } else if (manualExpanded) {
+          // 他のカードをフェードアウト
+          if (scannerCol) {
+            scannerCol.classList.add('fade-out');
+          }
+          if (barcodeInputCol) {
+            barcodeInputCol.classList.add('fade-out');
+          }
+
+          // トランジション完了後にレイアウト変更
+          setTimeout(function() {
+            if (scannerCol) {
+              scannerCol.className = 'd-none';
+              scannerCol.classList.remove('fade-out');
+            }
+            if (manualInputCol) {
+              manualInputCol.className = 'col-12';
+              manualInputCol.classList.remove('col-md-4', 'fade-out');
+            }
+            if (barcodeInputCol) {
+              barcodeInputCol.className = 'd-none';
+              barcodeInputCol.classList.remove('fade-out');
+            }
+          }, 300);
+        } else if (barcodeExpanded) {
+          // 他のカードをフェードアウト
+          if (scannerCol) {
+            scannerCol.classList.add('fade-out');
+          }
+          if (manualInputCol) {
+            manualInputCol.classList.add('fade-out');
+          }
+
+          // トランジション完了後にレイアウト変更
+          setTimeout(function() {
+            if (scannerCol) {
+              scannerCol.className = 'd-none';
+              scannerCol.classList.remove('fade-out');
+            }
+            if (manualInputCol) {
+              manualInputCol.className = 'd-none';
+              manualInputCol.classList.remove('fade-out');
+            }
+            if (barcodeInputCol) {
+              barcodeInputCol.className = 'col-12';
+              barcodeInputCol.classList.remove('col-md-4', 'fade-out');
+            }
+          }, 300);
+        }
+      } else {
+        // 全て折りたたまれている場合は3列表示（フェードイン）
+        if (scannerCol) {
+          scannerCol.className = 'col-md-4';
+          scannerCol.classList.remove('col-12', 'd-none', 'fade-out');
+        }
+        if (manualInputCol) {
+          manualInputCol.className = 'col-md-4';
+          manualInputCol.classList.remove('col-12', 'd-none', 'fade-out');
+        }
+        if (barcodeInputCol) {
+          barcodeInputCol.className = 'col-md-4';
+          barcodeInputCol.classList.remove('col-12', 'd-none', 'fade-out');
+        }
+      }
+    }
+
+    // スキャナー折りたたみイベント
+    if (scannerCollapse && scannerIcon) {
+      scannerCollapse.addEventListener('show.bs.collapse', function() {
+        scannerIcon.textContent = '▼';
+        updateInputLayout();
+      });
+      scannerCollapse.addEventListener('hidden.bs.collapse', function() {
+        scannerIcon.textContent = '▶';
+        updateInputLayout();
+      });
+    }
+
+    // 手動入力折りたたみイベント
+    if (manualCollapse && manualIcon) {
+      manualCollapse.addEventListener('show.bs.collapse', function() {
+        manualIcon.textContent = '▼';
+        updateInputLayout();
+      });
+      manualCollapse.addEventListener('hidden.bs.collapse', function() {
+        manualIcon.textContent = '▶';
+        updateInputLayout();
+      });
+    }
+
+    // バーコード直接入力折りたたみイベント
+    if (barcodeCollapse && barcodeIcon) {
+      barcodeCollapse.addEventListener('show.bs.collapse', function() {
+        barcodeIcon.textContent = '▼';
+        updateInputLayout();
+      });
+      barcodeCollapse.addEventListener('shown.bs.collapse', function() {
+        const input = document.getElementById('scanned_code');
+        if (input) {
+          input.focus();
+        }
+      });
+      barcodeCollapse.addEventListener('hidden.bs.collapse', function() {
+        barcodeIcon.textContent = '▶';
+        updateInputLayout();
+      });
+    }
+
+    // フィルタ折りたたみイベント
+    const filterCollapseElement = document.getElementById('filterCollapse');
+    const filterIconElement = document.getElementById('filterIcon');
+
+    if (filterCollapseElement && filterIconElement) {
+      filterCollapseElement.addEventListener('show.bs.collapse', function() {
+        filterIconElement.textContent = '▼';
+      });
+
+      filterCollapseElement.addEventListener('hide.bs.collapse', function() {
+        filterIconElement.textContent = '▶';
+      });
+    }
+
+    // 初期レイアウトを設定
+    updateInputLayout();
+  });
+
+  // Socket.IOでリアルタイム更新を受信
+  const socket = io({ path: '/fi/socket.io' });
+
+  socket.on('connect', function() {
+    console.log('Socket.IO接続成功');
+  });
+
+  socket.on('shipment_updated', function(data) {
+    console.log('出荷更新イベント受信:', data);
+
+    // ページをリロードして最新のデータを表示
+    // より高度な実装では、DOMを直接更新することも可能
+    location.reload();
+  });
+
+  socket.on('disconnect', function() {
+    console.log('Socket.IO切断');
+  });
+</script>
+{% endblock %}

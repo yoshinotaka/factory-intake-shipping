@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>納品書 - {{ shipping_method }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        
+        body {
+            font-family: "MS Gothic", "MS PGothic", "Hiragino Kaku Gothic Pro", "ヒラギノ角ゴ Pro W3", sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #000;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+        
+        .header h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .header .shipping-method {
+            font-size: 14pt;
+            margin-top: 5px;
+        }
+        
+        .info-section {
+            margin-bottom: 15px;
+        }
+        
+        .info-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            width: 100px;
+        }
+        
+        .info-value {
+            flex: 1;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 9pt;
+        }
+        
+        table th,
+        table td {
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: left;
+        }
+        
+        table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        table td {
+            text-align: left;
+        }
+        
+        .text-center {
+            text-align: center;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: right;
+            font-size: 8pt;
+            color: #666;
+        }
+        
+        .page-break {
+            page-break-after: always;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>納品書</h1>
+        <div class="shipping-method">出荷便: {{ shipping_method }}</div>
+    </div>
+    
+    <div class="info-section">
+        <div class="info-row">
+            <div class="info-label">発行日時:</div>
+            <div class="info-value">{{ generated_at.strftime('%Y年%m月%d日 %H:%M') }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">件数:</div>
+            <div class="info-value">{{ items|length }}件</div>
+        </div>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%;">No.</th>
+                <th style="width: 8%;">店舗コード</th>
+                <th style="width: 8%;">店舗名</th>
+                <th style="width: 10%;">タグ番号</th>
+                <th style="width: 20%;">商品名</th>
+                <th style="width: 12%;">顧客名</th>
+                <th style="width: 8%;">金額</th>
+                <th style="width: 8%;">数量</th>
+                <th style="width: 10%;">預かり日</th>
+                <th style="width: 11%;">包装</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="text-center">{{ loop.index }}</td>
+                <td class="text-center">{{ item.store_code[-2:] if item.store_code else '-' }}</td>
+                <td>{{ item.store_name or '-' }}</td>
+                <td class="text-center">{{ item.get_formatted_tag_number() }}</td>
+                <td>{{ item.product_name or '-' }}</td>
+                <td>{{ item.customer_name or '-' }}</td>
+                <td class="text-right">{{ '¥{:,}'.format(item.amount) if item.amount else '-' }}</td>
+                <td class="text-center">{{ item.quantity or '-' }}</td>
+                <td class="text-center">{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
+                <td class="text-center">{{ item.wrapping or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        発行日時: {{ generated_at.strftime('%Y年%m月%d日 %H:%M:%S') }}
+    </div>
+</body>
+</html>
+

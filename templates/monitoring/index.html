@@ -85,6 +85,59 @@
             </div>
         </div>
     </div>
+
+    <!-- アプリケーションログセクション -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">アプリケーションログ</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ログ名</th>
+                                    <th>説明</th>
+                                    <th>最終更新</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in app_logs %}
+                                <tr>
+                                    <td>{{ log.name }}</td>
+                                    <td>{{ log.description }}</td>
+                                    <td>
+                                        {% if log.last_modified %}
+                                            {{ log.last_modified.strftime('%Y-%m-%d %H:%M:%S') }}
+                                        {% else %}
+                                            <span class="text-muted">ファイルなし</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.exists %}
+                                            <a href="{{ url_for('monitoring.view_app_log', log_index=loop.index0) }}"
+                                               class="btn btn-sm btn-outline-primary">
+                                                ログを表示
+                                            </a>
+                                            <small class="text-muted d-block">
+                                                {{ (log.size / 1024) | round(2) }} KB
+                                            </small>
+                                        {% else %}
+                                            <span class="text-muted">ログなし</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -93,3 +146,15 @@
     }
 </style>
 {% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+

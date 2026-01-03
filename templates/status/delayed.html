@@ -74,7 +74,7 @@
             <input type="radio" name="store_filter" value="{{ store.store_code }}"
                    {% if selected_store == store.store_code %}checked{% endif %}
                    onchange="filterByStore()">
-            {{ store.store_code }} - {{ store.store_name }}
+            {{ store.store_code[-2:] }} - {{ store.store_name }}
           </label>
         </div>
         {% endfor %}
@@ -118,7 +118,7 @@
           {% if items %}
             {% for item in items %}
             <tr data-store-code="{{ item.store_code }}">
-              <td>{{ item.store_code }}</td>
+              <td>{{ item.store_code[-2:] if item.store_code else '-' }}</td>
               <td>{{ item.store_name or '-' }}</td>
               <td>{{ item.intake_date.strftime('%Y-%m-%d') if item.intake_date else '-' }}</td>
               <td><strong>{{ item.tag_number }}</strong></td>

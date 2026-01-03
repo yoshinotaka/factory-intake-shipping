@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{% if journal %}ジャーナルデータ編集{% else %}ジャーナルデータ作成{% endif %} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-6">
+        <h1>{% if journal %}ジャーナルデータ編集{% else %}ジャーナルデータ作成{% endif %}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('admin.journal_data_list') }}" class="btn btn-secondary">一覧に戻る</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="date" class="form-label">日付 <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="date" name="date"
+                               value="{{ journal.date.strftime('%Y-%m-%d') if journal else '' }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="store_no" class="form-label">店舗番号 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="store_no" name="store_no"
+                               value="{{ journal.store_no if journal else '' }}" required
+                               placeholder="例: 0002">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="slip_no" class="form-label">伝票番号 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="slip_no" name="slip_no"
+                               value="{{ journal.slip_no if journal else '' }}" required
+                               placeholder="例: S39922">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="customer_name" class="form-label">顧客名</label>
+                        <input type="text" class="form-control" id="customer_name" name="customer_name"
+                               value="{{ journal.customer_name if journal else '' }}"
+                               placeholder="例: 山田 太郎">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">電話番号</label>
+                        <input type="text" class="form-control" id="phone" name="phone"
+                               value="{{ journal.phone if journal else '' }}"
+                               placeholder="例: 090-1234-5678">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="slip_content" class="form-label">伝票内容</label>
+                        <textarea class="form-control" id="slip_content" name="slip_content" rows="5"
+                                  placeholder="伝票の詳細内容">{{ journal.slip_content if journal else '' }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success">
+                            {% if journal %}更新{% else %}作成{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

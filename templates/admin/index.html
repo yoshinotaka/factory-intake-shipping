@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}管理者ダッシュボード - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">管理者ダッシュボード</h1>
+        {% if not current_user.is_admin %}
+            <div class="alert alert-danger">
+                管理者権限がありません。
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">ユーザー管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">登録ユーザー数: <strong>{{ stats.users_count }}</strong></p>
+                <a href="{{ url_for('admin.users_list') }}" class="btn btn-primary">ユーザー一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">店舗管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">登録店舗数: <strong>{{ stats.stores_count }}</strong></p>
+                <a href="{{ url_for('admin.stores_list') }}" class="btn btn-success">店舗一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">商品状態管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">登録状態数: <strong>{{ stats.item_statuses_count }}</strong></p>
+                <a href="{{ url_for('admin.item_statuses_list') }}" class="btn btn-secondary">商品状態一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">入荷データ管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">入荷データ数: <strong>{{ stats.intake_items_count }}</strong></p>
+                <a href="{{ url_for('admin.intake_items_list') }}" class="btn btn-info">入荷データ一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">出荷ログ管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">出荷ログ数: <strong>{{ stats.shipment_logs_count }}</strong></p>
+                <a href="{{ url_for('admin.shipment_logs_list') }}" class="btn btn-warning">出荷ログ一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">遅れ品管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">遅れ品数: <strong>{{ stats.delayed_items_count }}</strong></p>
+                <a href="{{ url_for('admin.delayed_items_list') }}" class="btn btn-danger">遅れ品一覧</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">ジャーナルデータ管理</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">ジャーナルデータ数: <strong>{{ stats.journal_data_count }}</strong></p>
+                <a href="{{ url_for('admin.journal_data_list') }}" class="btn btn-dark">ジャーナルデータ一覧</a>
+                <a href="{{ url_for('admin.journal_import_status') }}" class="btn btn-outline-dark ms-2">取得状況</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h5>管理者機能について</h5>
+            <p class="mb-0">
+                この画面では、各テーブルのデータを直接編集・削除できます。
+                <strong>データベースに直接影響するため、操作には十分注意してください。</strong>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
