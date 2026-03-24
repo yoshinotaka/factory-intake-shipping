@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}取込み状況 - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">夜間バッチ 取込み状況</h1>
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">表示日数:</span>
+            {% for d in [7, 14, 30] %}
+            <a href="?days={{ d }}"
+               class="btn btn-sm {% if data.days == d %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                {{ d }}日
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <p class="text-muted small mb-3">
+        基準日: {{ data.today }} &nbsp;|&nbsp;
+        直近 {{ data.days }} 日間の店舗別取込み状況を表示します。
+        <span class="badge bg-success">○</span> 取得済み &nbsp;
+        <span class="badge bg-danger">未</span> 未取得
+    </p>
+
+    <!-- タブ切り替え -->
+    <ul class="nav nav-tabs mb-3" id="statusTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="intake-tab" data-bs-toggle="tab"
+                    data-bs-target="#intake-panel" type="button" role="tab">
+                入荷データ（hanjow CSV）
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="journal-tab" data-bs-toggle="tab"
+                    data-bs-target="#journal-panel" type="button" role="tab">
+                仕訳データ（ジャーナル）
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="statusTabContent">
+
+        <!-- ===== 入荷データタブ ===== -->
+        <div class="tab-pane fade show active" id="intake-panel" role="tabpanel">
+            {% set intake = data.intake %}
+            {% if not intake.stores %}
+                <div class="alert alert-warning">アクティブ店舗が登録されていません。</div>
+            {% else %}
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>入荷データ取込み状況</span>
+                    <span class="text-muted small">{{ intake.stores | length }} 店舗</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 70vh; overflow: auto;">
+                        <table class="table table-bordered table-sm mb-0"
+                               style="min-width: max-content;">
+                            <thead class="table-dark" style="position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th class="text-center" style="min-width: 130px; position: sticky; left: 0; z-index: 3; background: #212529;">
+                                        店舗
+                                    </th>
+                                    {% for stat in intake.date_stats %}
+                                    <th class="text-center" style="min-width: 76px; font-size: 0.75rem;">
+                                        {{ stat.date[5:] }}<br>
+                                        <small class="{% if stat.ok == stat.total %}text-success{% elif stat.ok == 0 %}text-danger{% else %}text-warning{% endif %}">
+                                            {{ stat.ok }}/{{ stat.total }}
+                                        </small>
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for store in intake.stores %}
+                                <tr>
+                                    <td style="position: sticky; left: 0; z-index: 1; background: #fff; font-size: 0.8rem; white-space: nowrap;">
+                                        <span class="text-muted" style="font-size: 0.7rem;">{{ store.code }}</span>
+                                        {{ store.name }}
+                                    </td>
+                                    {% for d in intake.dates %}
+                                    {% set ok = intake.status[d][store.code] %}
+                                    <td class="text-center {% if ok %}table-success{% else %}table-danger{% endif %}"
+                                        style="font-size: 0.85rem;">
+                                        {% if ok %}○{% else %}未{% endif %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ===== 仕訳データタブ ===== -->
+        <div class="tab-pane fade" id="journal-panel" role="tabpanel">
+            {% set journal = data.journal %}
+            {% if not journal.store_nos %}
+                <div class="alert alert-info">仕訳データがまだありません。</div>
+            {% else %}
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>仕訳データ取込み状況</span>
+                    <span class="text-muted small">{{ journal.store_nos | length }} 店舗番号</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 70vh; overflow: auto;">
+                        <table class="table table-bordered table-sm mb-0"
+                               style="min-width: max-content;">
+                            <thead class="table-dark" style="position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th class="text-center" style="min-width: 90px; position: sticky; left: 0; z-index: 3; background: #212529;">
+                                        店舗番号
+                                    </th>
+                                    {% for stat in journal.date_stats %}
+                                    <th class="text-center" style="min-width: 76px; font-size: 0.75rem;">
+                                        {{ stat.date[5:] }}<br>
+                                        <small class="{% if stat.ok == stat.total %}text-success{% elif stat.ok == 0 %}text-danger{% else %}text-warning{% endif %}">
+                                            {{ stat.ok }}/{{ stat.total }}
+                                        </small>
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sno in journal.store_nos %}
+                                <tr>
+                                    <td style="position: sticky; left: 0; z-index: 1; background: #fff; font-size: 0.85rem; text-align: center;">
+                                        {{ sno }}
+                                    </td>
+                                    {% for d in journal.dates %}
+                                    {% set ok = journal.status[d][sno] %}
+                                    <td class="text-center {% if ok %}table-success{% else %}table-danger{% endif %}"
+                                        style="font-size: 0.85rem;">
+                                        {% if ok %}○{% else %}未{% endif %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div><!-- /tab-content -->
+
+    <div class="mt-3 text-muted small">
+        <a href="{{ url_for('monitoring.index') }}">← Cron監視に戻る</a>
+    </div>
+</div>
+{% endblock %}

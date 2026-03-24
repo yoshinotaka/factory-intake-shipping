@@ -6,10 +6,12 @@ cronジョブの実行状況を確認し、ログファイルを表示する機�
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from factory_shipping.utils import now_jst
-from flask import Blueprint, render_template, request, current_app, url_for, redirect
+from flask import Blueprint, render_template, request, current_app, url_for, redirect, jsonify
 from flask_login import login_required
+from factory_shipping.models import IntakeItem, JournalData, Store
+from sqlalchemy import func
 
 monitoring_bp = Blueprint('monitoring', __name__)
 logger = logging.getLogger(__name__)
@@ -371,6 +373,118 @@ def view_app_log(log_index):
         from flask import flash, redirect
         flash(f'エラーが発生しました: {str(e)}', 'error')
         return redirect(url_for('monitoring.index'))
+
+
+def _build_import_status_data(days: int = 14) -> dict:
+    """入荷データ・仕訳データの店舗別取込み状況を構築する"""
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
+    dates = [start_date + timedelta(days=i) for i in range(days)]
+    date_strs = [d.strftime('%Y-%m-%d') for d in dates]
+
+    # ---- 入荷データ（IntakeItem × Store マスタ）----
+    stores = Store.query.filter_by(is_active=True).order_by(Store.store_code).all()
+    intake_rows = (
+        IntakeItem.query
+        .with_entities(IntakeItem.intake_date, IntakeItem.store_code, func.count().label('cnt'))
+        .filter(IntakeItem.intake_date >= start_date, IntakeItem.intake_date <= today)
+        .group_by(IntakeItem.intake_date, IntakeItem.store_code)
+        .all()
+    )
+    intake_done = {(r.intake_date.strftime('%Y-%m-%d'), r.store_code) for r in intake_rows if r.cnt > 0}
+
+    intake_status = {}
+    for d in date_strs:
+        intake_status[d] = {s.store_code: (d, s.store_code) in intake_done for s in stores}
+
+    intake_summary = {
+        'stores': [{'code': s.store_code, 'name': s.store_name} for s in stores],
+        'dates': date_strs,
+        'status': intake_status,
+        'date_stats': [
+            {
+                'date': d,
+                'ok': sum(1 for s in stores if intake_status[d].get(s.store_code)),
+                'total': len(stores),
+            }
+            for d in date_strs
+        ],
+    }
+
+    # ---- 仕訳データ（JournalData × 過去登場 store_no）----
+    since_master = today - timedelta(days=60)
+    expected_store_nos = sorted({
+        r[0] for r in
+        JournalData.query
+            .with_entities(JournalData.store_no)
+            .filter(JournalData.date >= since_master)
+            .distinct().all()
+    })
+
+    journal_rows = (
+        JournalData.query
+        .with_entities(JournalData.date, JournalData.store_no, func.count().label('cnt'))
+        .filter(JournalData.date >= start_date, JournalData.date <= today)
+        .group_by(JournalData.date, JournalData.store_no)
+        .all()
+    )
+    journal_done = {(r.date.strftime('%Y-%m-%d'), r.store_no) for r in journal_rows if r.cnt > 0}
+
+    journal_status = {}
+    for d in date_strs:
+        journal_status[d] = {sno: (d, sno) in journal_done for sno in expected_store_nos}
+
+    journal_summary = {
+        'store_nos': expected_store_nos,
+        'dates': date_strs,
+        'status': journal_status,
+        'date_stats': [
+            {
+                'date': d,
+                'ok': sum(1 for sno in expected_store_nos if journal_status[d].get(sno)),
+                'total': len(expected_store_nos),
+            }
+            for d in date_strs
+        ],
+    }
+
+    return {
+        'intake': intake_summary,
+        'journal': journal_summary,
+        'days': days,
+        'today': today.strftime('%Y-%m-%d'),
+    }
+
+
+@monitoring_bp.route('/import-status')
+@login_required
+def import_status():
+    """入荷データ・仕訳データの取込み状況ページ"""
+    try:
+        days = int(request.args.get('days', 14))
+        days = max(3, min(days, 60))
+        data = _build_import_status_data(days)
+        return render_template('monitoring/import_status.html', data=data)
+    except Exception as e:
+        logger.error(f"import-statusページエラー: {e}", exc_info=True)
+        from flask import flash
+        flash(f'エラーが発生しました: {str(e)}', 'error')
+        return redirect(url_for('monitoring.index'))
+
+
+@monitoring_bp.route('/api/import-status')
+@login_required
+def api_import_status():
+    """取込み状況JSON API"""
+    try:
+        days = int(request.args.get('days', 14))
+        days = max(3, min(days, 60))
+        data = _build_import_status_data(days)
+        return jsonify(data)
+    except Exception as e:
+        logger.error(f"api/import-statusエラー: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
 
 
 
