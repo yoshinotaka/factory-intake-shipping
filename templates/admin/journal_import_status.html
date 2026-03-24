@@ -133,6 +133,44 @@
     z-index: 1;
     background-color: rgba(0,0,0,.05);
   }
+  .note-btn {
+    background: none;
+    border: none;
+    padding: 0 0 0 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    opacity: 0.3;
+    line-height: 1;
+    vertical-align: middle;
+  }
+  .note-btn.has-note {
+    opacity: 1;
+    filter: sepia(1) saturate(5) hue-rotate(10deg);
+  }
+  .note-btn:hover {
+    opacity: 0.8;
+  }
+  .note-preview {
+    display: block;
+    font-size: 0.68rem;
+    color: #7c5600;
+    background-color: #fff9e6;
+    border-left: 2px solid #ffc107;
+    padding: 1px 4px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    cursor: pointer;
+    font-weight: normal;
+    text-align: left;
+    border-radius: 2px;
+  }
+  .note-preview:hover {
+    background-color: #fff3cd;
+  }
+
   .status-table th.store-header {
     min-width: 55px;
     max-width: 70px;
@@ -149,6 +187,13 @@
     padding: 5px 2px;
     font-size: 0.75rem;
     min-width: 55px;
+  }
+  .status-table th.store-header.closed-store {
+    background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+    opacity: 0.75;
+  }
+  .status-table td.store-data.closed-store {
+    background-color: rgba(107, 114, 128, 0.08);
   }
   .status-table th.total-header {
     position: sticky;
@@ -213,7 +258,7 @@
       </div>
       <div class="collapse" id="dateFilterCollapse">
         <div class="card-body">
-          <form method="get" action="{{ url_for('admin.journal_import_status') }}">
+          <form method="get" action="{{ url_for('journal_data.journal_import_status') }}">
             <input type="hidden" name="sort_order" value="{{ sort_order }}">
             <div class="row g-2">
               <div class="col-md-3">
@@ -228,7 +273,7 @@
               </div>
               <div class="col-md-3 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary btn-sm">検索</button>
-                <a href="{{ url_for('admin.journal_import_status') }}" class="btn btn-secondary btn-sm ms-2">リセット</a>
+                <a href="{{ url_for('journal_data.journal_import_status') }}" class="btn btn-secondary btn-sm ms-2">リセット</a>
               </div>
             </div>
           </form>
@@ -278,9 +323,23 @@
         <span class="ms-2" style="color: #0066cc; font-weight: bold;">数字</span> データ取得済み（件数を表示）
         <span class="badge bg-danger ms-2" style="cursor: pointer;">×</span> データ未取得（クリックでダウンロード・取り込み）
         <span class="badge bg-secondary ms-2" style="cursor: not-allowed;">-</span> 休店日（木曜日、火曜日・日曜日の一部店舗）
+        <span class="ms-2">📝</span> メモあり（日付の📝をクリックで編集）
       </div>
-      <div>
-        <a href="{{ url_for('monitoring.view_log', job_index=4) }}" class="btn btn-sm btn-outline-primary me-2" target="_blank">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        {% set q_date_from = date_from_str or date_from.strftime('%Y-%m-%d') %}
+        {% set q_date_to = date_to_str or date_to.strftime('%Y-%m-%d') %}
+        {% if show_closed %}
+        <a href="{{ url_for('journal_data.journal_import_status', date_from=q_date_from, date_to=q_date_to, sort_order=sort_order, show_closed='0') }}"
+           class="btn btn-sm btn-secondary">
+          🏪 閉店店舗を非表示
+        </a>
+        {% else %}
+        <a href="{{ url_for('journal_data.journal_import_status', date_from=q_date_from, date_to=q_date_to, sort_order=sort_order, show_closed='1') }}"
+           class="btn btn-sm btn-outline-secondary">
+          🏪 閉店店舗を表示
+        </a>
+        {% endif %}
+        <a href="{{ url_for('monitoring.view_log', job_index=4) }}" class="btn btn-sm btn-outline-primary" target="_blank">
           📥 ジャーナルダウンロードログを表示
         </a>
         <a href="{{ url_for('monitoring.view_log', job_index=5) }}" class="btn btn-sm btn-outline-primary" target="_blank">
@@ -303,12 +362,12 @@
               <span class="sort-buttons">
                 {% set current_date_from = date_from_str or date_from.strftime('%Y-%m-%d') %}
                 {% set current_date_to = date_to_str or date_to.strftime('%Y-%m-%d') %}
-                <a href="{{ url_for('admin.journal_import_status', date_from=current_date_from, date_to=current_date_to, sort_order='desc') }}"
+                <a href="{{ url_for('journal_data.journal_import_status', date_from=current_date_from, date_to=current_date_to, sort_order='desc') }}"
                    class="btn btn-sm btn-outline-light {% if sort_order == 'desc' %}active{% endif %}"
                    title="降順（新しい日付から）">
                   ↓
                 </a>
-                <a href="{{ url_for('admin.journal_import_status', date_from=current_date_from, date_to=current_date_to, sort_order='asc') }}"
+                <a href="{{ url_for('journal_data.journal_import_status', date_from=current_date_from, date_to=current_date_to, sort_order='asc') }}"
                    class="btn btn-sm btn-outline-light {% if sort_order == 'asc' %}active{% endif %}"
                    title="昇順（古い日付から）">
                   ↑
@@ -317,7 +376,9 @@
             </th>
             <th class="total-header">合計</th>
             {% for store_code, store_name in target_stores %}
-            <th class="store-header">{{ store_name }}</th>
+            <th class="store-header{% if store_code in closed_store_codes %} closed-store{% endif %}">
+              {{ store_name }}{% if store_code in closed_store_codes %}<br><small style="font-size:0.6rem;">(閉店)</small>{% endif %}
+            </th>
             {% endfor %}
           </tr>
         </thead>
@@ -326,7 +387,11 @@
           {% set target_date = date_item.date %}
           {% set daily_counts = [] %}
           {% for store_code, store_name in target_stores %}
-            {% if target_date.weekday() != 3 and not (target_date.weekday() == 1 and store_code in ['0013', '0016', '0020', '0024']) and not (target_date.weekday() == 6 and store_code == '0011') %}
+            {% if target_date.weekday() != 3
+               and not (target_date.weekday() == 1 and temp_tuesday_start <= target_date and target_date <= temp_tuesday_end)
+               and not (target_date.weekday() == 1 and store_code in ['0013', '0016', '0020', '0024'])
+               and not (target_date.weekday() == 6 and store_code == '0011')
+               and not (target_date in holiday_dates and store_code == '0011') %}
               {% if status_data.get(store_code, {}).get(target_date, {}).get('has_data', False) %}
                 {% set count = status_data.get(store_code, {}).get(target_date, {}).get('count', 0) %}
                 {% set _ = daily_counts.append(count) %}
@@ -338,19 +403,35 @@
             <td class="date-cell">
               {{ target_date.strftime('%Y-%m-%d') }}<br>
               <small>({{ date_item.weekday }})</small>
+              <button class="note-btn {% if notes_data.get(target_date) %}has-note{% endif %}"
+                      data-date="{{ target_date.strftime('%Y-%m-%d') }}"
+                      data-note="{{ notes_data.get(target_date, '') | e }}"
+                      title="{% if notes_data.get(target_date) %}{{ notes_data.get(target_date) }}{% else %}メモを追加{% endif %}">📝</button>
+              {% if notes_data.get(target_date) %}
+              <span class="note-preview"
+                    data-date="{{ target_date.strftime('%Y-%m-%d') }}"
+                    data-note="{{ notes_data.get(target_date, '') | e }}"
+                    title="{{ notes_data.get(target_date) }}">{{ notes_data.get(target_date) }}</span>
+              {% endif %}
             </td>
             <td class="total-cell">{{ daily_total }}</td>
             {% for store_code, store_name in target_stores %}
-            <td class="store-data">
+            <td class="store-data{% if store_code in closed_store_codes %} closed-store{% endif %}">
               {% if target_date.weekday() == 3 %}
                 {# 木曜日（全店休店日） #}
                 <span class="closed-day" title="休店日（木曜日）">-</span>
+              {% elif target_date.weekday() == 1 and temp_tuesday_start <= target_date and target_date <= temp_tuesday_end %}
+                {# 火曜日（臨時定休日：2026-01-13〜2026-03-17） #}
+                <span class="closed-day" title="臨時定休日（火曜日）">-</span>
               {% elif target_date.weekday() == 1 and store_code in ['0013', '0016', '0020', '0024'] %}
                 {# 火曜日（特定店舗休店日：東福生店、いなげや福生店、オザム小作店、秋川店） #}
                 <span class="closed-day" title="休店日（火曜日）">-</span>
               {% elif target_date.weekday() == 6 and store_code == '0011' %}
                 {# 日曜日（本社青梅店休店日） #}
                 <span class="closed-day" title="休店日（日曜日）">-</span>
+              {% elif target_date in holiday_dates and store_code == '0011' %}
+                {# 祝日（本社青梅店定休日） #}
+                <span class="closed-day" title="祝日定休日">-</span>
               {% elif status_data.get(store_code, {}).get(target_date, {}).get('has_data', False) %}
                 {% set count = status_data.get(store_code, {}).get(target_date, {}).get('count', 0) %}
                 <span class="has-data" title="{{ store_name }}: {{ count }}件のデータ">{{ count }}</span>
@@ -369,6 +450,27 @@
           {% endfor %}
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- メモ編集モーダル -->
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="noteModalLabel"><span id="noteModalDate"></span> のメモ</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <textarea id="noteText" class="form-control" rows="4"
+                  placeholder="例：外部システム障害のため取得不可、後日対応予定"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="deleteNoteBtn" class="btn btn-outline-danger btn-sm me-auto">削除</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">キャンセル</button>
+        <button id="saveNoteBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -410,6 +512,54 @@
     let progressModal = null;
     let progressInterval = null;
     let lastLogCount = 0;
+    let currentBtnsForDate = null;  // 現在処理中のボタン群
+    let currentTimeoutId = null;    // 安全網タイムアウトID
+
+    // 完了処理（成功・エラー共通）
+    function handleCompletion(finalStatus) {
+      // 二重呼び出し防止
+      if (!progressInterval && currentTimeoutId === null) return;
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+      if (currentTimeoutId) {
+        clearTimeout(currentTimeoutId);
+        currentTimeoutId = null;
+      }
+
+      const modalEl = document.getElementById('progressModal');
+      const afterHide = () => {
+        if (finalStatus.status === 'success') {
+          let message = finalStatus.message || '処理が完了しました';
+          if (finalStatus.import_result) {
+            message += `\n\n新規作成: ${finalStatus.import_result.created}件\n`;
+            message += `スキップ: ${finalStatus.import_result.skipped}件\n`;
+            message += `エラー: ${finalStatus.import_result.errors}件`;
+          }
+          alert(message);
+          window.location.reload();
+        } else {
+          alert(`エラー: ${finalStatus.message || 'エラーが発生しました'}`);
+          if (currentBtnsForDate) {
+            currentBtnsForDate.forEach(function(b) {
+              b.classList.remove('fetching');
+              b.textContent = '×';
+            });
+          }
+        }
+      };
+
+      if (progressModal && modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function handler() {
+          modalEl.removeEventListener('hidden.bs.modal', handler);
+          afterHide();
+        });
+        progressModal.hide();
+      } else {
+        afterHide();
+      }
+    }
 
     // モーダルHTML要素を作成
     function createProgressModal() {
@@ -446,9 +596,9 @@
       });
     }
 
-    // 進捗ログを取得
+    // 進捗ログを取得（バックグラウンドジョブの完了も検知）
     function fetchProgress(dateStr) {
-      fetch(`/fi/admin/journal-data/fetch-csv-progress/${dateStr}`)
+      fetch(`/fi/journal-data/fetch-csv-progress/${dateStr}`)
         .then(response => response.json())
         .then(data => {
           if (data.success && data.logs) {
@@ -463,10 +613,80 @@
               }
             }
           }
+          // バックグラウンドジョブの完了を検知
+          if (data.final_status) {
+            handleCompletion(data.final_status);
+          }
         })
         .catch(error => {
           console.error('進捗取得エラー:', error);
         });
+    }
+
+    // メモ編集モーダルの制御
+    const noteModalEl = document.getElementById('noteModal');
+    const noteModal = noteModalEl ? new bootstrap.Modal(noteModalEl) : null;
+    let currentNoteDate = null;
+
+    function openNoteModal(date, note) {
+      currentNoteDate = date;
+      document.getElementById('noteModalDate').textContent = date;
+      document.getElementById('noteText').value = note || '';
+      if (noteModal) noteModal.show();
+    }
+
+    document.querySelectorAll('.note-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        openNoteModal(this.getAttribute('data-date'), this.getAttribute('data-note'));
+      });
+    });
+
+    document.querySelectorAll('.note-preview').forEach(function(el) {
+      el.addEventListener('click', function() {
+        openNoteModal(this.getAttribute('data-date'), this.getAttribute('data-note'));
+      });
+    });
+
+    const saveNoteBtn = document.getElementById('saveNoteBtn');
+    if (saveNoteBtn) {
+      saveNoteBtn.addEventListener('click', function() {
+        const note = document.getElementById('noteText').value.trim();
+        fetch(`/fi/journal-data/note/${currentNoteDate}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: note })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.success) {
+            if (noteModal) noteModal.hide();
+            window.location.reload();
+          } else {
+            alert('保存に失敗しました: ' + (data.message || '不明なエラー'));
+          }
+        }).catch(function(err) {
+          alert('通信エラーが発生しました: ' + err.message);
+        });
+      });
+    }
+
+    const deleteNoteBtn = document.getElementById('deleteNoteBtn');
+    if (deleteNoteBtn) {
+      deleteNoteBtn.addEventListener('click', function() {
+        if (!confirm('メモを削除しますか？')) return;
+        fetch(`/fi/journal-data/note/${currentNoteDate}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: '' })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.success) {
+            if (noteModal) noteModal.hide();
+            window.location.reload();
+          } else {
+            alert('削除に失敗しました: ' + (data.message || '不明なエラー'));
+          }
+        }).catch(function(err) {
+          alert('通信エラーが発生しました: ' + err.message);
+        });
+      });
     }
 
     // 未取得データのCSVダウンロード機能
@@ -481,6 +701,7 @@
 
         // ボタンの状態を変更（処理中）- 同じ日付のすべての店舗のボタンを更新
         const allBtnsForDate = document.querySelectorAll(`[data-date="${dateStr}"]`);
+        currentBtnsForDate = allBtnsForDate;
         allBtnsForDate.forEach(function(b) {
           b.classList.add('fetching');
           b.textContent = '⏳';
@@ -493,7 +714,7 @@
         progressModal.show();
         lastLogCount = 0;
 
-        // 1秒ごとに進捗を取得
+        // 1秒ごとに進捗を取得（バックグラウンドジョブの完了もポーリングで検知）
         progressInterval = setInterval(() => {
           fetchProgress(dateStr);
         }, 1000);
@@ -501,8 +722,14 @@
         // 最初の進捗取得
         fetchProgress(dateStr);
 
-        // AJAX リクエスト
-        fetch(`/fi/admin/journal-data/fetch-csv/${dateStr}`, {
+        // 安全網タイムアウト（10分）
+        currentTimeoutId = setTimeout(() => {
+          currentTimeoutId = null;
+          handleCompletion({ status: 'error', message: '処理がタイムアウトしました（10分以上かかっています）' });
+        }, 10 * 60 * 1000);
+
+        // POST リクエスト — バックグラウンドジョブを起動するだけ（即時返却）
+        fetch(`/fi/journal-data/fetch-csv/${dateStr}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -510,64 +737,15 @@
         })
         .then(response => response.json())
         .then(data => {
-          // 進捗取得を停止
-          if (progressInterval) {
-            clearInterval(progressInterval);
-            progressInterval = null;
+          if (data.status === 'started') {
+            // バックグラウンドで処理中 — ポーリングで完了を待つ
+          } else if (!data.success) {
+            // 即時エラー（バリデーションエラーなど）
+            handleCompletion({ status: 'error', message: data.message || 'エラーが発生しました' });
           }
-
-          // 最後の進捗を取得
-          setTimeout(() => {
-            fetchProgress(dateStr);
-          }, 500);
-
-          setTimeout(() => {
-            if (progressModal) {
-              progressModal.hide();
-            }
-
-            if (data.success) {
-              // 成功メッセージ
-              let message = data.message;
-              if (data.import_result) {
-                message += `\n\n新規作成: ${data.import_result.created}件\n`;
-                message += `スキップ: ${data.import_result.skipped}件\n`;
-                message += `エラー: ${data.import_result.errors}件`;
-              }
-              alert(message);
-
-              // ページをリロード（データ取得状況を更新）
-              window.location.reload();
-            } else {
-              // エラーメッセージ
-              alert(`エラー: ${data.message}`);
-
-              // ボタンの状態を元に戻す
-              allBtnsForDate.forEach(function(b) {
-                b.classList.remove('fetching');
-                b.textContent = '×';
-              });
-            }
-          }, 1000);
         })
         .catch(error => {
-          // 進捗取得を停止
-          if (progressInterval) {
-            clearInterval(progressInterval);
-            progressInterval = null;
-          }
-
-          if (progressModal) {
-            progressModal.hide();
-          }
-
-          alert(`通信エラーが発生しました: ${error.message}`);
-
-          // ボタンの状態を元に戻す
-          allBtnsForDate.forEach(function(b) {
-            b.classList.remove('fetching');
-            b.textContent = '×';
-          });
+          handleCompletion({ status: 'error', message: `通信エラーが発生しました: ${error.message}` });
         });
       });
     });
