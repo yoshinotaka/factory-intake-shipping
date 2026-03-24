@@ -92,6 +92,10 @@ def register_blueprints(app):
     from factory_shipping.admin.views import admin_bp
     app.register_blueprint(admin_bp, url_prefix='/fi/admin')
 
+    # ジャーナルデータ操作機能（取得状況・CSV取得）
+    from factory_shipping.journal_data.views import journal_data_bp
+    app.register_blueprint(journal_data_bp, url_prefix='/fi/journal-data')
+
     # ルートパス
     from factory_shipping.views import main_bp
     app.register_blueprint(main_bp, url_prefix='/fi')
