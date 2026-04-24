@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 def index():
     """管理者ダッシュボード"""
     # 各テーブルのレコード数を取得
+    # users_count は king-req 側で管理するためここでは集計しない
     stats = {
-        'users_count': User.query.count(),
         'stores_count': Store.query.count(),
         'item_statuses_count': ItemStatus.query.count(),
         'intake_items_count': IntakeItem.query.count(),
@@ -36,121 +36,8 @@ def index():
     return render_template('admin/index.html', stats=stats)
 
 
-# ==================== Users 管理 ====================
-
-@admin_bp.route('/users')
-@login_required
-@admin_required
-def users_list():
-    """ユーザー一覧"""
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-
-    users = User.query.order_by(desc(User.created_at)).paginate(
-        page=page, per_page=per_page, error_out=False
-    )
-    return render_template('admin/users_list.html', users=users)
-
-
-@admin_bp.route('/users/create', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def users_create():
-    """ユーザー作成"""
-    if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email', '').strip() or None
-        password = request.form.get('password')
-        is_admin = request.form.get('is_admin') == 'on'
-        is_store_staff = request.form.get('is_store_staff') == 'on'
-        is_factory_staff = request.form.get('is_factory_staff') == 'on'
-        is_shift_staff = request.form.get('is_shift_staff') == 'on'
-        is_office_staff = request.form.get('is_office_staff') == 'on'
-        is_active = request.form.get('is_active', 'on') == 'on'
-
-        # バリデーション
-        if User.query.filter_by(username=username).first():
-            flash('このユーザー名は既に使用されています', 'error')
-            return redirect(url_for('admin.users_create'))
-
-        if email and User.query.filter_by(email=email).first():
-            flash('このメールアドレスは既に使用されています', 'error')
-            return redirect(url_for('admin.users_create'))
-
-        user = User(
-            username=username,
-            email=email,
-            is_admin=is_admin,
-            is_store_staff=is_store_staff,
-            is_factory_staff=is_factory_staff,
-            is_shift_staff=is_shift_staff,
-            is_office_staff=is_office_staff,
-            is_active=is_active
-        )
-        user.set_password(password)
-
-        db.session.add(user)
-        db.session.commit()
-
-        flash(f'ユーザー「{username}」を作成しました', 'success')
-        return redirect(url_for('admin.users_list'))
-
-    return render_template('admin/users_form.html', user=None)
-
-
-@admin_bp.route('/users/<int:user_id>/edit', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def users_edit(user_id):
-    """ユーザー編集"""
-    user = User.query.get_or_404(user_id)
-
-    if request.method == 'POST':
-        user.username = request.form.get('username')
-        email = request.form.get('email', '').strip() or None
-        # メールアドレスの重複チェック（自分自身以外）
-        if email and User.query.filter(User.email == email, User.id != user.id).first():
-            flash('このメールアドレスは既に使用されています', 'error')
-            return redirect(url_for('admin.users_edit', user_id=user_id))
-        user.email = email
-        user.is_admin = request.form.get('is_admin') == 'on'
-        user.is_store_staff = request.form.get('is_store_staff') == 'on'
-        user.is_factory_staff = request.form.get('is_factory_staff') == 'on'
-        user.is_shift_staff = request.form.get('is_shift_staff') == 'on'
-        user.is_office_staff = request.form.get('is_office_staff') == 'on'
-        user.is_active = request.form.get('is_active') == 'on'
-
-        # パスワード変更（入力されている場合のみ）
-        new_password = request.form.get('password')
-        if new_password:
-            user.set_password(new_password)
-
-        db.session.commit()
-        flash(f'ユーザー「{user.username}」を更新しました', 'success')
-        return redirect(url_for('admin.users_list'))
-
-    return render_template('admin/users_form.html', user=user)
-
-
-@admin_bp.route('/users/<int:user_id>/delete', methods=['POST'])
-@login_required
-@admin_required
-def users_delete(user_id):
-    """ユーザー削除"""
-    user = User.query.get_or_404(user_id)
-
-    # 自分自身は削除できない
-    from flask_login import current_user
-    if user.id == current_user.id:
-        flash('自分自身を削除することはできません', 'error')
-        return redirect(url_for('admin.users_list'))
-
-    username = user.username
-    db.session.delete(user)
-    db.session.commit()
-
-    flash(f'ユーザー「{username}」を削除しました', 'success')
-    return redirect(url_for('admin.users_list'))
+# ユーザー管理は king-req 側の /admin/users/ に一元化
+# （ /fi/admin/users* ルート群は factory-intake-shipping から削除済み）
 
 
 # ==================== ItemStatus 管理 ====================

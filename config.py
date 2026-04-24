@@ -41,6 +41,15 @@ class BaseConfig:
         'pool_pre_ping': True,
     }
 
+    # 認証用DB: king-req の auth_users を参照する（ユーザー管理を king-req に一元化）
+    # AUTH_DB_URL 環境変数で上書き可能。未設定時は king-req の本番SQLiteを参照。
+    SQLALCHEMY_BINDS = {
+        'auth_db': os.environ.get(
+            'AUTH_DB_URL',
+            'sqlite:////var/www/html/king-req/instance/production.db',
+        ),
+    }
+
     # ファイルアップロード設定
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')

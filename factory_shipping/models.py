@@ -13,33 +13,59 @@ from factory_shipping.utils import now_jst
 
 
 class User(UserMixin, db.Model):
-    """ユーザーモデル"""
+    """ユーザーモデル（king-req の auth_users を参照）
 
-    __tablename__ = 'users'
+    ユーザー管理は king-req 側に一元化済み。このモデルは auth_users テーブルを
+    読み書きするだけで、ユーザーのCRUD UIは /admin/users/ (king-req) に存在する。
+
+    既存コードとの互換を保つため、旧スキーマの Boolean フラグ（is_admin ほか）は
+    `role` から派生するプロパティとして提供する。
+    """
+
+    __tablename__ = 'auth_users'
+    __bind_key__ = 'auth_db'
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
+    username = db.Column(db.String(100), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='user', index=True)
+    employee_code = db.Column(db.String(50), nullable=True, unique=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    is_admin = db.Column(db.Boolean, default=False, nullable=False)
-    is_store_staff = db.Column(db.Boolean, default=False, nullable=False)
-    is_factory_staff = db.Column(db.Boolean, default=False, nullable=False)
-    is_shift_staff = db.Column(db.Boolean, default=False, nullable=False)
-    is_office_staff = db.Column(db.Boolean, default=False, nullable=False)
+    last_login_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
     updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
 
+    # --- role から派生する旧 Boolean フラグ互換シム ---
+    # admin は全ての役割を兼ねる（king-req 側 user_has_role と同等のセマンティクス）
+    @property
+    def is_admin(self):
+        return self.role == 'admin'
+
+    @property
+    def is_store_staff(self):
+        return self.role in ('admin', 'shop_staff')
+
+    @property
+    def is_factory_staff(self):
+        return self.role in ('admin', 'factory_worker')
+
+    @property
+    def is_shift_staff(self):
+        return self.role in ('admin', 'shift')
+
+    @property
+    def is_office_staff(self):
+        return self.role in ('admin', 'office')
+
+    # --- パスワード（auth_users は pbkdf2:sha256:260000 を採用） ---
     def set_password(self, password):
-        """パスワードをハッシュ化して保存"""
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256:260000')
 
     def check_password(self, password):
-        """パスワードの検証"""
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return f'<User {self.username}>'
+        return f'<User {self.username} ({self.role})>'
 
 
 class Store(db.Model):
@@ -176,7 +202,9 @@ class ShipmentLog(db.Model):
     tag_number = db.Column(db.String(20), nullable=True, index=True)  # タグ番号
     history_number = db.Column(db.Integer, nullable=True)  # 履歴番号（同じ商品の何回目の変更か）
 
-    scanned_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # scanned_by_user_id は king-req の auth_users.id を参照する。
+    # cross-bind のためFK制約・relationship は定義せず、`scanned_by` プロパティで解決する。
+    scanned_by_user_id = db.Column(db.Integer, nullable=True)
     operator_id = db.Column(db.Integer, db.ForeignKey('factory_operators.id'), nullable=True, index=True)  # 担当者ID
     scanned_at = db.Column(db.DateTime, default=now_jst, nullable=False, index=True)
     scanned_code = db.Column(db.String(100), nullable=True)  # バーコード（手動変更の場合はNULL）
@@ -190,9 +218,15 @@ class ShipmentLog(db.Model):
     notes = db.Column(db.Text, nullable=True)  # 備考・理由
 
     # リレーション
-    scanned_by = db.relationship('User', backref='shipment_logs')
     operator = db.relationship('FactoryOperator', backref='shipment_logs')
     new_status = db.relationship('ItemStatus', foreign_keys=[new_status_id])
+
+    @property
+    def scanned_by(self):
+        """スキャン実行ユーザー（auth_users 参照）。後方互換のため relationship と同名のプロパティを提供。"""
+        if not self.scanned_by_user_id:
+            return None
+        return User.query.get(self.scanned_by_user_id)
 
     def __repr__(self):
         return f'<ShipmentLog Item#{self.intake_item_id} at {self.scanned_at}>'
@@ -261,3 +295,21 @@ class JournalData(db.Model):
 
     def __repr__(self):
         return f'<JournalData {self.date} {self.store_no}/{self.slip_no}: {self.customer_name}>'
+
+
+class JournalDownloadNote(db.Model):
+    """ジャーナルダウンロードメモ（日付単位）
+
+    ダウンロードできなかった日付に管理者がメモを残すためのモデル。
+    """
+
+    __tablename__ = 'journal_download_notes'
+
+    date = db.Column(db.Date, primary_key=True)
+    note = db.Column(db.Text, nullable=False)
+    created_by = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=now_jst, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_jst, onupdate=now_jst, nullable=False)
+
+    def __repr__(self):
+        return f'<JournalDownloadNote {self.date}: {self.note[:30]}>'
