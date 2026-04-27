@@ -56,19 +56,17 @@ def _serialize_item(item: IntakeItem) -> dict:
 @intake_bp.route('/api/lookup', methods=['GET'])
 @login_required
 def api_lookup():
-    """店舗番号+タグ番号から入荷データを検索して JSON を返す。
+    """店舗番号+タグ番号から入荷データを検索して JSON を返す（単発検索）。
 
     クエリパラメータ:
         store_code (必須): 店舗コード（2〜4桁、自動でゼロ埋め）
         tag_number (必須): タグ番号（"0-123" や "0123" など複数形式に対応）
-        intake_date (任意): YYYY-MM-DD。指定すれば絞り込み、無ければ最新を採用
 
     レスポンス:
         { found, item, candidates } または { found: false, message, candidates: [] }
     """
     store_code = (request.args.get('store_code') or '').strip()
     tag_number = (request.args.get('tag_number') or '').strip()
-    intake_date_str = (request.args.get('intake_date') or '').strip()
 
     if not store_code:
         return jsonify({'found': False, 'error': 'store_code は必須です'}), 400
@@ -81,22 +79,13 @@ def api_lookup():
     if not tag_patterns:
         return jsonify({'found': False, 'error': 'tag_number の形式が不正です'}), 400
 
-    query = IntakeItem.query.filter(
+    items = IntakeItem.query.filter(
         IntakeItem.store_code == store_code,
         IntakeItem.tag_number.in_(tag_patterns),
-    )
-
-    if intake_date_str:
-        try:
-            intake_date_obj = datetime.strptime(intake_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            return jsonify({'found': False, 'error': 'intake_date は YYYY-MM-DD 形式で指定してください'}), 400
-        query = query.filter(IntakeItem.intake_date == intake_date_obj)
-
-    items = query.order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
+    ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
 
     if not items:
-        logger.info(f"lookup miss: store_code={store_code}, tag_number={tag_number}, intake_date={intake_date_str or '-'}")
+        logger.info(f"lookup miss: store_code={store_code}, tag_number={tag_number}")
         return jsonify({
             'found': False,
             'message': '該当するタグが入荷データに見つかりませんでした',
@@ -106,8 +95,7 @@ def api_lookup():
     primary = items[0]
     logger.info(
         f"lookup hit: id={primary.id}, store_code={primary.store_code}, "
-        f"tag_number={primary.tag_number}, intake_date={primary.intake_date}, "
-        f"hits={len(items)}"
+        f"tag_number={primary.tag_number}, hits={len(items)}"
     )
 
     candidates = [
@@ -125,3 +113,122 @@ def api_lookup():
         'item': _serialize_item(primary),
         'candidates': candidates,
     })
+
+
+def _build_tag_4digit(tag_input: str) -> tuple:
+    """ユーザ入力タグを (left_part, right_part_int, right_width) に分解する。
+
+    "1123"   → ("1", 123, 3)
+    "07-001" → ("07", 1, 3)
+    "0-12"   → ("0", 12, 2)
+    None / 不正 → None
+    """
+    s = (tag_input or '').strip()
+    if not s:
+        return None
+    if '-' in s:
+        parts = s.split('-')
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            return (parts[0], int(parts[1]), max(len(parts[1]), 1))
+        return None
+    if s.isdigit() and len(s) == 4:
+        return (s[0], int(s[1:]), 3)
+    return None
+
+
+def _format_tag_for_display(left: str, right_int: int, right_width: int) -> str:
+    """(left, right, width) → "left-rightZeroPad"。検索用ではなく UI 表示用。"""
+    return f"{left}-{str(right_int).zfill(right_width)}"
+
+
+@intake_bp.route('/api/lookup_range', methods=['GET'])
+@login_required
+def api_lookup_range():
+    """店舗番号+開始タグから連番で count 件分を一括検索して JSON を返す。
+
+    クエリパラメータ:
+        store_code (必須): 店舗コード（2〜4桁、自動でゼロ埋め）
+        tag_number (必須): 開始タグ番号
+        count (任意): 取得件数。既定 6（開始 + 5）。1〜20 にクランプ
+
+    レスポンス:
+        {
+          "items": [
+            { "requested_tag": "1-123", "found": true,  "item": { ... } },
+            { "requested_tag": "1-124", "found": false, "item": null   },
+            ...
+          ]
+        }
+    """
+    store_code = (request.args.get('store_code') or '').strip()
+    tag_number = (request.args.get('tag_number') or '').strip()
+    count_str = (request.args.get('count') or '6').strip()
+
+    if not store_code:
+        return jsonify({'error': 'store_code は必須です'}), 400
+    if not tag_number:
+        return jsonify({'error': 'tag_number は必須です'}), 400
+
+    try:
+        count = int(count_str)
+    except ValueError:
+        return jsonify({'error': 'count は整数で指定してください'}), 400
+    count = max(1, min(20, count))
+
+    parts = _build_tag_4digit(tag_number)
+    if not parts:
+        return jsonify({'error': 'tag_number の形式が不正です（例: 1123, 07-001）'}), 400
+
+    left, start_right, right_width = parts
+    store_code = _normalize_store_code(store_code)
+
+    # 全候補タグを生成し、検索パターンを和集合で 1 クエリにまとめる
+    target_tags = []
+    pattern_to_tag = {}
+    all_patterns = set()
+    for offset in range(count):
+        rint = start_right + offset
+        display_tag = _format_tag_for_display(left, rint, right_width)
+        # 入力形式を保ったまま検索パターン展開
+        patterns = normalize_tag_number_for_search(display_tag)
+        target_tags.append({'display': display_tag, 'patterns': patterns})
+        for p in patterns:
+            all_patterns.add(p)
+            pattern_to_tag.setdefault(p, set()).add(display_tag)
+
+    rows = IntakeItem.query.filter(
+        IntakeItem.store_code == store_code,
+        IntakeItem.tag_number.in_(list(all_patterns)),
+    ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
+
+    # 同タグで複数日付ヒットする場合は最新の 1 件を採用
+    items_by_tag = {}
+    for r in rows:
+        # この row の tag_number から該当する display_tag を逆引き
+        for display_tag in pattern_to_tag.get(r.tag_number, set()):
+            if display_tag not in items_by_tag:
+                items_by_tag[display_tag] = r
+
+    result_items = []
+    hit_count = 0
+    for t in target_tags:
+        intake = items_by_tag.get(t['display'])
+        if intake is not None:
+            hit_count += 1
+            result_items.append({
+                'requested_tag': t['display'],
+                'found': True,
+                'item': _serialize_item(intake),
+            })
+        else:
+            result_items.append({
+                'requested_tag': t['display'],
+                'found': False,
+                'item': None,
+            })
+
+    logger.info(
+        f"lookup_range: store={store_code}, start={tag_number}, count={count}, hits={hit_count}/{count}"
+    )
+
+    return jsonify({'items': result_items})
