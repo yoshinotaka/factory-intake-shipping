@@ -591,12 +591,31 @@ def intake_items_create():
         if status_id == 0:
             status_id = None
 
+        slip_number = request.form.get('slip_number') or None
+        tag_number = request.form.get('tag_number')
+
+        # 重複チェック: store_code + intake_date + tag_number + slip_number
+        # CSV取り込みと同じキーで既存レコードを検査し、同一レコードの二重作成を防ぐ
+        if tag_number:
+            existing = IntakeItem.query.filter_by(
+                store_code=store.store_code,
+                intake_date=intake_date,
+                tag_number=tag_number,
+                slip_number=slip_number,
+            ).first()
+            if existing:
+                flash(
+                    f'既に同一の入荷データが存在します（伝票No: {slip_number or "(空)"} / タグ: {tag_number}）',
+                    'error',
+                )
+                return redirect(url_for('admin.intake_items_create'))
+
         item = IntakeItem(
             store_id=store_id,
             store_code=store.store_code,
             store_name=store.store_name,
-            slip_number=request.form.get('slip_number'),
-            tag_number=request.form.get('tag_number'),
+            slip_number=slip_number,
+            tag_number=tag_number,
             product_name=request.form.get('product_name'),
             customer_name=request.form.get('customer_name'),
             amount=request.form.get('amount', type=int),

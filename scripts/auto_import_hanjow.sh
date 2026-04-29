@@ -19,6 +19,16 @@
 #
 ################################################################################
 
+# 並行起動防止: cron二重登録や手動実行の重複が起きても DB に重複を作らないよう
+# flock で排他制御する。既に動作中なら即座に exit 0 する。
+LOCK_FILE="/tmp/factory-auto-import.lock"
+exec 9> "${LOCK_FILE}"
+if ! flock -n 9; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] auto_import_hanjow.sh: 別プロセスが実行中のためスキップ" \
+        | tee -a /var/log/factory-shipping/auto-import.log
+    exit 0
+fi
+
 # 設定
 PROJECT_DIR="/var/www/html/factory-intake-shipping"
 VENV_DIR="${PROJECT_DIR}/venv"

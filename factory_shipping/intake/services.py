@@ -112,12 +112,17 @@ def import_hanjow_csv(file_path: str) -> Dict[str, int]:
             # CSV リーダーを作成（ヘッダー行から）
             reader = csv.DictReader(f)
 
+            # バッチ内重複検知用: (store_code, intake_date, tag_number, slip_number) の集合
+            # 同一CSV内に同じ4-tupleの行が複数あった場合や、並行プロセスとの
+            # TOCTOUレースで2行目が DB に届く前に検査される事故を防ぐ。
+            seen_in_batch = set()
+
             for row_num, row in enumerate(reader, start=9):  # ヘッダーが8行目なので9から
                 stats['total_rows'] += 1
 
                 try:
                     # CSV から IntakeItem を作成
-                    result = _create_intake_item_from_csv_row(row)
+                    result = _create_intake_item_from_csv_row(row, seen_in_batch)
 
                     if result == 'created':
                         stats['created'] += 1
@@ -141,24 +146,15 @@ def import_hanjow_csv(file_path: str) -> Dict[str, int]:
     return stats
 
 
-def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
+def _create_intake_item_from_csv_row(row: Dict[str, str], seen_in_batch: Optional[set] = None) -> str:
     """
     CSV の1行から IntakeItem を作成する
 
-    TODO: 実際の CSV の列名に合わせて調整してください。
-    以下は仮の列名で実装しています。
-
-    想定される列名（例）:
-        - '店舗コード' または 'store_code'
-        - '店舗名' または 'store_name'
-        - 'タグ番号' または 'tag_number'
-        - '預かり日' または 'intake_date'
-        - '顧客名' または 'customer_name'
-        - '商品名' または 'product_name'
-        - '金額' または 'amount'
-
     Args:
         row (dict): CSV の1行（辞書形式）
+        seen_in_batch (set, optional): バッチ内で既に処理済みの
+            (store_code, intake_date, tag_number, slip_number) を記録する集合。
+            渡された場合、同一バッチ内重複を検知してスキップする。
 
     Returns:
         str: 'created' または 'skipped'
@@ -210,7 +206,15 @@ def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
     # 店舗マスタから店舗を取得（存在しない場合は作成）
     store = _get_or_create_store(store_code, store_name)
 
-    # 重複チェック: store_code + intake_date + tag_number + slip_number
+    # バッチ内重複の早期スキップ
+    dedup_key = (store_code, intake_date, tag_number, slip_number if slip_number else None)
+    if seen_in_batch is not None and dedup_key in seen_in_batch:
+        logger.debug(f"バッチ内重複をスキップ: {store_code}/{slip_number}/{tag_number}/{intake_date}")
+        return 'skipped'
+
+    # 未コミットの add() が後続の query から見えるよう flush し、
+    # その上で DB 上の既存レコードをチェックする
+    db.session.flush()
     existing = IntakeItem.query.filter_by(
         store_code=store_code,
         intake_date=intake_date,
@@ -219,6 +223,8 @@ def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
     ).first()
 
     if existing:
+        if seen_in_batch is not None:
+            seen_in_batch.add(dedup_key)
         logger.debug(f"重複データをスキップ: {store_code}/{slip_number}/{tag_number}/{intake_date}")
         return 'skipped'
 
@@ -244,6 +250,8 @@ def _create_intake_item_from_csv_row(row: Dict[str, str]) -> str:
     )
 
     db.session.add(intake_item)
+    if seen_in_batch is not None:
+        seen_in_batch.add(dedup_key)
     logger.debug(f"新規作成: {store_code}/{tag_number}/{intake_date}")
 
     return 'created'
