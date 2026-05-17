@@ -54,7 +54,11 @@ except Exception:
     pass
 
 try:
-    from agent.lineworks_client import push_message as lw_push
+    # king-req (master) の application.services.lineworks.dispatch_send を経由する。
+    # これにより本 cron の通知も notification_send_logs に記録され、
+    # 通知管理画面 (/admin/notifications/) で履歴を辿れる。
+    # definition_key='shipping_retry_failure' (env_lock=prod_only) を使用。
+    from application.services.lineworks import dispatch_send
     LW_AVAILABLE = True
 except Exception as _lw_e:
     LW_AVAILABLE = False
@@ -93,18 +97,29 @@ def log(msg: str):
 
 
 def lw_notify(text: str):
-    """LINE WORKS へ通知を送る。未設定・エラーの場合はログのみ。"""
+    """LINE WORKS へ通知を送る。未設定・エラーの場合はログのみ。
+
+    king-req の application.services.lineworks.dispatch_send 経由で送信し、
+    結果は notification_send_logs に記録される。通知管理画面の履歴で追跡可能。
+    """
     if not LW_AVAILABLE:
-        log(f"[LINE] スキップ（クライアント未初期化: {_lw_import_error}）")
+        log(f"[LINE] スキップ（dispatcher 未初期化: {_lw_import_error}）")
         return
     try:
-        ok = lw_push(text)
-        if ok:
-            log("[LINE] 送信完了")
+        result = dispatch_send(
+            definition_key='shipping_retry_failure',
+            body=text,
+            trigger_source='cron',
+            triggered_by='factory_shipping.retry_and_notify',
+        )
+        if result.status == 'success':
+            log(f"[LINE] 送信完了 log_id={result.log_id}")
+        elif result.status in ('skipped', 'blocked'):
+            log(f"[LINE] 送信スキップ ({result.skip_reason}) log_id={result.log_id}")
         else:
-            log("[LINE] 送信失敗（push_message が False を返しました）")
+            log(f"[LINE] 送信失敗 ({result.error_message}) log_id={result.log_id}")
     except Exception as e:
-        log(f"[LINE] 送信エラー: {e}")
+        log(f"[LINE] dispatcher 例外: {type(e).__name__}: {e}")
 
 
 def get_last_business_day() -> date:
