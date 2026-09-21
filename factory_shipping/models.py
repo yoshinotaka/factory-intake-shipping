@@ -177,6 +177,21 @@ class IntakeItem(db.Model):
     # リレーション
     shipment_logs = db.relationship('ShipmentLog', backref='intake_item', lazy='dynamic')
 
+    # お客様に返却した品目（returned_at あり）の状態。status_id より優先する。
+    # item_statuses には登録しない: 'returned' は「再戻」で使用中で、マスタに足すと
+    # 工場画面の手動の状態変更に出てしまうため。
+    RETURNED_STATUS_CODE = 'returned_to_customer'
+    RETURNED_STATUS_NAME = '返却済'
+
+    @property
+    def display_status(self):
+        """画面・API に出す状態 (status_code, status_name)。未設定なら (None, None)。"""
+        if self.returned_at is not None:
+            return self.RETURNED_STATUS_CODE, self.RETURNED_STATUS_NAME
+        if self.status:
+            return self.status.status_code, self.status.status_name
+        return None, None
+
     def get_formatted_tag_number(self):
         """タグ番号を0-000形式で返す（先頭1桁を除去）"""
         if not self.tag_number:

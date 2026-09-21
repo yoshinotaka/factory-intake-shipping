@@ -260,11 +260,16 @@ def intake_items_list():
             )
 
     # 商品状態フィルタ（status_idでフィルタリング）
+    # 返却済（returned_at あり）は一覧で「返却済」と表示するので、工場側の状態で
+    # 絞るときは除き、「返却済」を選んだときだけ出す（IntakeItem.display_status と同じ規則）
     status_filter = request.args.get('status_id', '').strip()
-    if status_filter:
+    if status_filter == IntakeItem.RETURNED_STATUS_CODE:
+        query = query.filter(IntakeItem.returned_at.isnot(None))
+    elif status_filter:
         try:
             status_id = int(status_filter)
-            query = query.filter(IntakeItem.status_id == status_id)
+            query = query.filter(IntakeItem.status_id == status_id,
+                                 IntakeItem.returned_at.is_(None))
         except ValueError:
             pass
 

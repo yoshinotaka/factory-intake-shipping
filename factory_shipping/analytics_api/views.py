@@ -27,12 +27,6 @@ logger = logging.getLogger(__name__)
 
 JST = timezone(timedelta(hours=9))
 
-# お客様に返却した品目（intake_items.returned_at あり）の状態。status_id より優先する。
-# item_statuses には登録しない: 'returned' は「再戻」で使用中で、マスタに足すと
-# 工場画面の手動の状態変更に出てしまうため。返却の取り込みは intake/returns.py。
-RETURNED_STATUS_CODE = 'returned_to_customer'
-RETURNED_STATUS_NAME = '返却済'
-
 
 # ---------------------------------------------------------------------------
 # 共通ヘルパー
@@ -66,12 +60,8 @@ def _clamp_pagination() -> tuple[int, int]:
 
 def _serialize_item(item: IntakeItem) -> dict:
     """IntakeItem を API レスポンス用 dict に変換。"""
-    if item.returned_at is not None:
-        status_code, status_name = RETURNED_STATUS_CODE, RETURNED_STATUS_NAME
-    elif item.status:
-        status_code, status_name = item.status.status_code, item.status.status_name
-    else:
-        status_code = status_name = None
+    # 返却済（returned_at あり）は工場側の状態より優先する（intake/returns.py 参照）
+    status_code, status_name = item.display_status
     return {
         'id': item.id,
         'store_code': item.store_code,

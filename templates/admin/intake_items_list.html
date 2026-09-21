@@ -82,6 +82,7 @@
                         {% for status in item_statuses %}
                         <option value="{{ status.id }}" {% if request.args.get('status_id')|int == status.id %}selected{% endif %}>{{ status.status_name }}</option>
                         {% endfor %}
+                        <option value="returned_to_customer" {% if request.args.get('status_id') == 'returned_to_customer' %}selected{% endif %}>返却済</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -310,6 +311,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>入荷状態</th>
                 <th>商品状態</th>
                 <th>出荷日時</th>
+                <th>返却日時</th>
                 <th>備考</th>
                 <th>CSV取り込み日時</th>
                 <th>作成日時</th>
@@ -337,13 +339,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="badge bg-secondary">{{ item.intake_status }}</span>
                 </td>
                 <td>
-                    {% if item.status %}
-                        <span class="badge bg-info">{{ item.status.status_code }} - {{ item.status.status_name }}</span>
+                    {# 返却済（returned_at あり）は工場側の状態より優先して表示する #}
+                    {% set status_code, status_name = item.display_status %}
+                    {% if item.returned_at %}
+                        <span class="badge bg-success">{{ status_code }} - {{ status_name }}</span>
+                    {% elif status_code %}
+                        <span class="badge bg-info">{{ status_code }} - {{ status_name }}</span>
                     {% else %}
                         <span class="badge bg-secondary">未設定</span>
                     {% endif %}
                 </td>
                 <td>{{ item.shipped_at.strftime('%Y-%m-%d %H:%M') if item.shipped_at else '-' }}</td>
+                <td>{{ item.returned_at.strftime('%Y-%m-%d %H:%M') if item.returned_at else '-' }}</td>
                 <td>{{ item.notes or '-' }}</td>
                 <td>{{ item.imported_at.strftime('%Y-%m-%d %H:%M') if item.imported_at else '-' }}</td>
                 <td>{{ item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '-' }}</td>
