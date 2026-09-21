@@ -366,6 +366,94 @@ def import_journal(target_date=None):
             sys.exit(1)
 
 
+def import_returns(argv):
+    """
+    返却日指定 CSV を取り込み、返却された品目の intake_items.returned_at を設定する
+
+    例:
+        python run.py import-returns                     # 直近7日分（昨日まで。毎朝の cron はこれ）
+        python run.py import-returns --days 14
+        python run.py import-returns --date 2026-09-20   # 1日分
+        python run.py import-returns --from 2021-01-05 --to 2026-09-20   # 過去分の一括反映
+        python run.py import-returns --all               # 手元にある返却 CSV をすべて
+        python run.py import-returns --date 2026-09-20 --dry-run          # DB を書き換えずに件数だけ見る
+
+    何度流しても結果は同じ（新しい返却日時のときだけ上書きする）。
+    詳細は factory_shipping/intake/returns.py を参照。
+    """
+    import argparse
+    import logging
+    from datetime import timedelta
+    from factory_shipping.intake.returns import (
+        import_return_csvs, list_return_csv_dates, recent_dates,
+    )
+
+    parser = argparse.ArgumentParser(prog='run.py import-returns')
+    parser.add_argument('--date', help='返却日 (YYYY-MM-DD)')
+    parser.add_argument('--from', dest='from_date', help='返却日の開始 (YYYY-MM-DD)')
+    parser.add_argument('--to', dest='to_date', help='返却日の終了 (YYYY-MM-DD)')
+    parser.add_argument('--days', type=int, default=7, help='昨日から何日さかのぼるか（既定 7）')
+    parser.add_argument('--all', action='store_true', help='手元にある返却 CSV をすべて取り込む')
+    parser.add_argument('--dry-run', action='store_true', help='DB を書き換えずに件数だけ出す')
+    args = parser.parse_args(argv)
+
+    # 一括反映では数百万行の SQL が出てしまうので、SQL のログは止める
+    logging.getLogger('sqlalchemy.engine.Engine').disabled = True
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(message)s')
+
+    def parse(value):
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            parser.error(f'日付の形式が正しくありません: {value}（YYYY-MM-DD）')
+
+    with app.app_context():
+        if args.all:
+            dates = list_return_csv_dates()
+        elif args.date:
+            dates = [parse(args.date)]
+        elif args.from_date or args.to_date:
+            if not (args.from_date and args.to_date):
+                parser.error('--from と --to は両方指定してください')
+            start, end = parse(args.from_date), parse(args.to_date)
+            dates = [start + timedelta(days=n) for n in range((end - start).days + 1)]
+        else:
+            dates = recent_dates(args.days)
+
+        if not dates:
+            print('対象の返却日がありません')
+            return
+
+        print("=" * 60)
+        print("  返却日指定 CSV 取り込み" + ("（dry-run: DB は書き換えない）" if args.dry_run else ""))
+        print(f"  返却日: {dates[0].isoformat()} 〜 {dates[-1].isoformat()}（{len(dates)} 日）")
+        print("=" * 60)
+
+        try:
+            by_year = import_return_csvs(dates, dry_run=args.dry_run)
+        except Exception as e:
+            print(f"エラー: 返却 CSV の取り込み中に予期しない問題が発生しました: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+        print()
+        print("  返却年  ファイル  無し  行数     一致(タグ有/空)       不一致(タグ有/空)  範囲外    取消  更新     既反映")
+        for key in sorted(k for k in by_year if k != 'total') + ['total']:
+            s = by_year[key]
+            print(f"  {key:<6} {s['files']:>8} {s['missing']:>5} {s['rows']:>8}"
+                  f"  {s['matched_tagged']:>9}/{s['matched_untagged']:<9}"
+                  f"  {s['unmatched_tagged']:>7}/{s['unmatched_untagged']:<9}"
+                  f"  {s['out_of_range']:>8} {s['cancelled']:>5}"
+                  f"  {s['items_updated']:>7} {s['items_unchanged']:>7}")
+        total = by_year['total']
+        print()
+        print("  範囲外 = 預り日が intake_items の最古の預り日より前（突き合わせ対象外）")
+        if total['errors']:
+            print(f"  読めない行: {total['errors']} 行（ログを確認してください）")
+        print("取り込みが完了しました。" if not args.dry_run else "dry-run のため DB は変更していません。")
+
+
 @app.cli.command()
 def init_db_command():
     """データベース初期化コマンド"""
@@ -407,6 +495,8 @@ if __name__ == '__main__':
             if len(sys.argv) > 2 and sys.argv[2] == '--date' and len(sys.argv) > 3:
                 target_date = sys.argv[3]
             import_journal(target_date)
+        elif command == 'import-returns':
+            import_returns(sys.argv[2:])
         elif command == 'list-users':
             list_users()
         else:
@@ -421,6 +511,8 @@ if __name__ == '__main__':
             print("  import-hanjow --date YYYY-MM-DD  - 指定日付の CSV を取り込み")
             print("  import-journal       - ジャーナル CSV 取り込み（今日の日付）")
             print("  import-journal --date YYYY-MM-DD - 指定日付の CSV を取り込み")
+            print("  import-returns       - 返却日指定 CSV 取り込み（直近7日分）")
+            print("  import-returns --date YYYY-MM-DD / --from D --to D / --all [--dry-run]")
             sys.exit(1)
     else:
         # 開発サーバーを起動

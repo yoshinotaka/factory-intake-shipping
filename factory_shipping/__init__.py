@@ -96,6 +96,10 @@ def register_blueprints(app):
     from factory_shipping.journal_data.views import journal_data_bp
     app.register_blueprint(journal_data_bp, url_prefix='/fi/journal-data')
 
+    # 顧客利用状況分析 API（外部システム向け / 認証必須 / origin 制限）
+    from factory_shipping.analytics_api import analytics_api_bp
+    app.register_blueprint(analytics_api_bp)
+
     # ルートパス
     from factory_shipping.views import main_bp
     app.register_blueprint(main_bp, url_prefix='/fi')

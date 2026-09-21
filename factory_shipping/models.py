@@ -132,6 +132,11 @@ class IntakeItem(db.Model):
     # 伝票・タグ情報
     slip_number = db.Column(db.String(20), nullable=True, index=True)  # 伝票No
     tag_number = db.Column(db.String(20), nullable=False, index=True)  # タグ番号（例: "4-212" または "4212"）
+    # 同一 (店,日付,伝票,タグ,商品名) 内の出現順（1,2,3…）。空タグの付帯行
+    # （会員登録料 / ﾏﾃﾞ早期引取 等）が同一キーに潰れて脱落する不具合の対策。
+    # 重複排除キーに商品名＋本連番を含めることで空タグ行を 1:1 保存する。
+    # 商品名単位の採番のため、会員登録料は常に seq=1 となりローリング再取込でも冪等。
+    line_seq = db.Column(db.Integer, nullable=False, default=1, index=True)
 
     # 商品・顧客情報
     product_name = db.Column(db.String(200), nullable=True)  # 商品名
@@ -147,6 +152,10 @@ class IntakeItem(db.Model):
     # 現在の状態（最新のShipmentLogの状態と一致）
     status_id = db.Column(db.Integer, db.ForeignKey('item_statuses.id'), nullable=True, index=True)
     shipped_at = db.Column(db.DateTime, nullable=True)  # 最新の状態変更日時
+
+    # お客様への返却日時（JST）。返却日指定 CSV から intake/returns.py が設定する。
+    # status_id とは独立に持ち、預り日 CSV の再取り込みや出荷スキャンでは変わらない。
+    returned_at = db.Column(db.DateTime, nullable=True, index=True)
 
     # 入荷状態（通常、工場請求中、完了済み、など）
     intake_status = db.Column(db.String(20), default='通常', nullable=False, index=True)

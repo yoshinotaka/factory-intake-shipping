@@ -20,3 +20,11 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # 毎日 22:35 実行 (CSVは22:30配置想定)
 # ========================================
 35 22 * * * ec2-user /var/www/html/factory-intake-shipping/scripts/auto_import_hanjow.sh >> /var/log/factory-shipping/auto-import.log 2>&1
+
+# ========================================
+# 返却日指定 CSV 取り込み（intake_items.returned_at）
+# 毎日 05:00 実行（kingdrysystem からの rsync が 04:30 に届いた後）
+# - 直近7日分（昨日まで）を読み直す。何度流しても結果は同じ
+# - CSV が無い日（定休日など）はスキップ
+# ========================================
+0 5 * * * ec2-user /var/www/html/factory-intake-shipping/scripts/auto_import_returns.sh >> /var/log/factory-shipping/import-returns.log 2>&1
