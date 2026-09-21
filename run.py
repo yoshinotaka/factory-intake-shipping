@@ -454,6 +454,94 @@ def import_returns(argv):
         print("取り込みが完了しました。" if not args.dry_run else "dry-run のため DB は変更していません。")
 
 
+def run_historical(command, argv):
+    """
+    過去分（預り日 2021-01-04〜2025-09-30）の取り込みと埋め戻し。詳細は factory_shipping/intake/historical.py
+
+    例:
+        python run.py import-historical --date 2022-06-01 --dry-run      # 1 日分（件数だけ）
+        python run.py import-historical --from 2022-06-01 --to 2022-06-30
+        python run.py import-historical --all                            # 手元の CSV すべて（2025-09-30 まで）
+        python run.py fill-returned-from-intake --all                    # 返却 CSV の反映（import-returns --all）のあとに流す
+        python run.py backfill-customer-code --from 2025-10-01 --to 2026-09-21   # 既存品目に顧客コード（hanjow_*.csv から）
+
+    どれも何度流しても結果は同じ。
+    """
+    import argparse
+    import logging
+    from datetime import timedelta
+    from factory_shipping.intake import historical
+
+    parser = argparse.ArgumentParser(prog=f'run.py {command}')
+    parser.add_argument('--date', help='預り日 (YYYY-MM-DD)')
+    parser.add_argument('--from', dest='from_date', help='預り日の開始 (YYYY-MM-DD)')
+    parser.add_argument('--to', dest='to_date', help='預り日の終了 (YYYY-MM-DD)')
+    parser.add_argument('--all', action='store_true', help='対象の CSV をすべて')
+    parser.add_argument('--dry-run', action='store_true', help='DB を書き換えずに件数だけ出す')
+    args = parser.parse_args(argv)
+
+    logging.getLogger('sqlalchemy.engine.Engine').disabled = True
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(message)s')
+
+    def parse(value):
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            parser.error(f'日付の形式が正しくありません: {value}（YYYY-MM-DD）')
+
+    if args.date:
+        dates = [parse(args.date)]
+    elif args.from_date or args.to_date:
+        if not (args.from_date and args.to_date):
+            parser.error('--from と --to は両方指定してください')
+        start, end = parse(args.from_date), parse(args.to_date)
+        dates = [start + timedelta(days=n) for n in range((end - start).days + 1)]
+    elif args.all:
+        if command == 'backfill-customer-code':
+            dates = sorted(datetime.strptime(p.stem[len('hanjow_'):], '%Y%m%d').date()
+                           for p in historical.HANJOW_CSV_DIR.glob('hanjow_*.csv')
+                           if p.stem[len('hanjow_'):].isdigit())
+        else:
+            dates = historical.list_intake_csv_dates()
+    else:
+        parser.error('--date / --from と --to / --all のどれかを指定してください')
+
+    if command == 'import-historical':
+        run, title = historical.import_intake_csvs, '過去分の預り日 CSV 取り込み'
+        columns = [('files', 'ファイル'), ('missing', '無し'), ('rows', '行数'), ('cancelled', '取消'),
+                   ('created', '新規'), ('existing', '既存'), ('errors', '読めない')]
+    elif command == 'fill-returned-from-intake':
+        run, title = historical.fill_returned_from_intake_csvs, '預り日 CSV の返却日時列で returned_at を補う'
+        columns = [('files', 'ファイル'), ('with_value', '返却日時あり'), ('filled', '埋めた'),
+                   ('already', '返却CSVで反映済'), ('not_found', '品目なし')]
+    else:
+        run, title = historical.backfill_customer_codes, '既存品目に顧客コードを入れる（hanjow_*.csv・預り日 CSV）'
+        columns = [('files', 'ファイル'), ('missing', '無し'), ('rows', '行数'),
+                   ('items_with_code', 'コード判明'), ('filled', '埋めた'), ('errors', '読めない')]
+
+    print("=" * 60)
+    print(f"  {title}" + ("（dry-run: DB は書き換えない）" if args.dry_run else ""))
+    print(f"  預り日: {dates[0].isoformat()} 〜 {dates[-1].isoformat()}（{len(dates)} 日）")
+    print("=" * 60)
+
+    started = datetime.now()
+    with app.app_context():
+        try:
+            by_year = run(dates, dry_run=args.dry_run)
+        except Exception as e:
+            print(f"エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+
+    print()
+    print('  年     ' + ''.join(f'{label:>12}' for _, label in columns))
+    for key in sorted(k for k in by_year if k != 'total') + ['total']:
+        print(f'  {key:<6} ' + ''.join(f'{by_year[key][name]:>12}' for name, _ in columns))
+    print(f"\n  所要時間: {(datetime.now() - started).total_seconds():.0f} 秒")
+    print("完了しました。" if not args.dry_run else "dry-run のため DB は変更していません。")
+
+
 @app.cli.command()
 def init_db_command():
     """データベース初期化コマンド"""
@@ -497,6 +585,8 @@ if __name__ == '__main__':
             import_journal(target_date)
         elif command == 'import-returns':
             import_returns(sys.argv[2:])
+        elif command in ('import-historical', 'fill-returned-from-intake', 'backfill-customer-code'):
+            run_historical(command, sys.argv[2:])
         elif command == 'list-users':
             list_users()
         else:
@@ -513,6 +603,10 @@ if __name__ == '__main__':
             print("  import-journal --date YYYY-MM-DD - 指定日付の CSV を取り込み")
             print("  import-returns       - 返却日指定 CSV 取り込み（直近7日分）")
             print("  import-returns --date YYYY-MM-DD / --from D --to D / --all [--dry-run]")
+            print("  import-historical          - 過去分（2021-01〜2025-09）の預り日 CSV を取り込む")
+            print("  fill-returned-from-intake  - 預り日 CSV の返却日時列で returned_at を補う（import-returns の後）")
+            print("  backfill-customer-code     - 既存品目に顧客コードを入れる（hanjow_*.csv から）")
+            print("    共通: --date YYYY-MM-DD / --from D --to D / --all [--dry-run]")
             sys.exit(1)
     else:
         # 開発サーバーを起動

@@ -27,6 +27,17 @@ logger = logging.getLogger(__name__)
 
 JST = timezone(timedelta(hours=9))
 
+# 期間の指定が無いときに全期間（2021-01〜）を部分一致・集計しないための既定の期間（日）。
+# /customers/search と /stats/products だけに使う（kinglinesystem は期間なしで呼ばない。2026-09-21 確認）。
+DEFAULT_PERIOD_DAYS = 365
+
+
+def _default_from_date(from_date, to_date):
+    """from_date も to_date も無ければ、今日から DEFAULT_PERIOD_DAYS 日前を返す。"""
+    if from_date or to_date:
+        return from_date
+    return datetime.now(JST).date() - timedelta(days=DEFAULT_PERIOD_DAYS)
+
 
 # ---------------------------------------------------------------------------
 # 共通ヘルパー
@@ -71,6 +82,7 @@ def _serialize_item(item: IntakeItem) -> dict:
         'line_seq': item.line_seq,
         'product_name': item.product_name,
         'customer_name': item.customer_name,
+        'customer_code': item.customer_code,
         'amount': item.amount,
         'quantity': item.quantity,
         'intake_date': item.intake_date.isoformat() if item.intake_date else None,
@@ -169,6 +181,7 @@ def list_intake_items():
       store_code          -- 店舗コード
       intake_status       -- 入荷状態 ("通常" 等)
       customer_name       -- 顧客名 (完全一致)
+      customer_code       -- 顧客コード (完全一致、12 桁)
       limit, offset       -- ページネーション
     """
     try:
@@ -180,6 +193,7 @@ def list_intake_items():
     store_code = (request.args.get('store_code') or '').strip() or None
     intake_status = (request.args.get('intake_status') or '').strip() or None
     customer_name = (request.args.get('customer_name') or '').strip() or None
+    customer_code = (request.args.get('customer_code') or '').strip() or None
     limit, offset = _clamp_pagination()
 
     q = IntakeItem.query
@@ -192,6 +206,8 @@ def list_intake_items():
     )
     if customer_name:
         q = q.filter(IntakeItem.customer_name == customer_name)
+    if customer_code:
+        q = q.filter(IntakeItem.customer_code == customer_code)
 
     total = q.with_entities(func.count(IntakeItem.id)).scalar()
     rows = (
@@ -219,7 +235,7 @@ def search_customers():
 
     クエリパラメータ:
       q              -- 検索文字列 (必須、最低 1 文字)
-      from_date, to_date -- 集計対象期間
+      from_date, to_date -- 集計対象期間。どちらも無ければ直近 1 年（部分一致は索引が効かないため）
       store_code     -- 店舗フィルタ
       limit, offset
 
@@ -239,6 +255,7 @@ def search_customers():
 
     store_code = (request.args.get('store_code') or '').strip() or None
     limit, offset = _clamp_pagination()
+    from_date = _default_from_date(from_date, to_date)
 
     # 部分一致。autoescape で q 中の % と _ はワイルドカードではなく文字として扱う
     filtered = IntakeItem.query.filter(
@@ -448,16 +465,20 @@ def customer_history():
     """指定顧客の利用明細を新しい順で返す。
 
     クエリパラメータ:
-      customer_name (必須) -- 完全一致
-      from_date, to_date
+      customer_name -- 完全一致
+      customer_code -- 完全一致（12 桁）。customer_name とどちらか一方は必須。両方あれば両方で絞る
+      from_date, to_date -- 無ければ全期間（(customer_name|customer_code, intake_date) の索引で引く）
       store_code
       limit, offset
     """
     customer_name = (request.args.get('customer_name') or '').strip()
-    if not customer_name:
-        return _error('customer_name is required')
+    customer_code = (request.args.get('customer_code') or '').strip()
+    if not customer_name and not customer_code:
+        return _error('customer_name or customer_code is required')
     if len(customer_name) > 100:
         return _error('customer_name too long')
+    if len(customer_code) > 20:
+        return _error('customer_code too long')
 
     try:
         from_date = _parse_date(request.args.get('from_date'))
@@ -468,7 +489,11 @@ def customer_history():
     store_code = (request.args.get('store_code') or '').strip() or None
     limit, offset = _clamp_pagination()
 
-    q = IntakeItem.query.filter(IntakeItem.customer_name == customer_name)
+    q = IntakeItem.query
+    if customer_name:
+        q = q.filter(IntakeItem.customer_name == customer_name)
+    if customer_code:
+        q = q.filter(IntakeItem.customer_code == customer_code)
     q = _apply_common_filters(
         q,
         from_date=from_date,
@@ -485,7 +510,8 @@ def customer_history():
          .all()
     )
     return jsonify({
-        'customer_name': customer_name,
+        'customer_name': customer_name or None,
+        'customer_code': customer_code or None,
         'total': int(total or 0),
         'limit': limit,
         'offset': offset,
@@ -561,7 +587,7 @@ def product_stats():
     """商品名別の取扱件数・売上合計の TOP N を返す。
 
     クエリパラメータ:
-      from_date, to_date
+      from_date, to_date -- どちらも無ければ直近 1 年
       store_code
       limit (default 50, max 500)
     """
@@ -572,6 +598,7 @@ def product_stats():
         return _error(str(e))
 
     store_code = (request.args.get('store_code') or '').strip() or None
+    from_date = _default_from_date(from_date, to_date)
 
     try:
         limit = int(request.args.get('limit', 50))

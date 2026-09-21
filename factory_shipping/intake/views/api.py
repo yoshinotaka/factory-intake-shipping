@@ -9,13 +9,13 @@ king-req 側の店舗請求フォームから AJAX で呼び出され、
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import jsonify, request
 from flask_login import login_required
 
 from factory_shipping.models import IntakeItem
-from factory_shipping.utils import normalize_tag_number_for_search
+from factory_shipping.utils import normalize_tag_number_for_search, today_jst
 from factory_shipping.intake.views import intake_bp
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,22 @@ def _normalize_store_code(store_code: str) -> str:
     if store_code.isdigit():
         return store_code.zfill(4)
     return store_code
+
+
+def _max_age_filter():
+    """max_age_days（任意）があれば「預り日が今日からその日数以内」の条件を返す。無ければ None。
+
+    同じタグは周回して再利用される（最短 100 日）。当日受付でまだ取り込まれていない品物を探すと、
+    前回そのタグを使った品目が見つかってしまうので、呼び出し側が期間を絞れるようにする。
+    """
+    raw = (request.args.get('max_age_days') or '').strip()
+    if not raw:
+        return None
+    try:
+        days = max(1, min(3650, int(raw)))
+    except ValueError:
+        return None
+    return IntakeItem.intake_date >= today_jst() - timedelta(days=days)
 
 
 def _serialize_item(item: IntakeItem) -> dict:
@@ -61,6 +77,7 @@ def api_lookup():
     クエリパラメータ:
         store_code (必須): 店舗コード（2〜4桁、自動でゼロ埋め）
         tag_number (必須): タグ番号（"0-123" や "0123" など複数形式に対応）
+        max_age_days (任意): 預り日が今日からこの日数以内の品目だけ
 
     レスポンス:
         { found, item, candidates } または { found: false, message, candidates: [] }
@@ -79,10 +96,16 @@ def api_lookup():
     if not tag_patterns:
         return jsonify({'found': False, 'error': 'tag_number の形式が不正です'}), 400
 
-    items = IntakeItem.query.filter(
+    # 過去分（2025-09 以前）は請求の対象にならないので出さない
+    query = IntakeItem.query.filter(
         IntakeItem.store_code == store_code,
         IntakeItem.tag_number.in_(tag_patterns),
-    ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
+        IntakeItem.in_business_scope(),
+    )
+    age_filter = _max_age_filter()
+    if age_filter is not None:
+        query = query.filter(age_filter)
+    items = query.order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
 
     if not items:
         logger.info(f"lookup miss: store_code={store_code}, tag_number={tag_number}")
@@ -150,6 +173,7 @@ def api_lookup_range():
         store_code (必須): 店舗コード（2〜4桁、自動でゼロ埋め）
         tag_number (必須): 開始タグ番号
         count (任意): 取得件数。既定 6（開始 + 5）。1〜20 にクランプ
+        max_age_days (任意): 預り日が今日からこの日数以内の品目だけ（前回そのタグを使った品目を拾わないため）
 
     レスポンス:
         {
@@ -196,10 +220,15 @@ def api_lookup_range():
             all_patterns.add(p)
             pattern_to_tag.setdefault(p, set()).add(display_tag)
 
-    rows = IntakeItem.query.filter(
+    query = IntakeItem.query.filter(
         IntakeItem.store_code == store_code,
         IntakeItem.tag_number.in_(list(all_patterns)),
-    ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
+        IntakeItem.in_business_scope(),  # 過去分（2025-09 以前）は出さない
+    )
+    age_filter = _max_age_filter()
+    if age_filter is not None:
+        query = query.filter(age_filter)
+    rows = query.order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).all()
 
     # 同タグで複数日付ヒットする場合は最新の 1 件を採用
     items_by_tag = {}

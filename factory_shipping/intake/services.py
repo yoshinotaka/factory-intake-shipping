@@ -169,6 +169,7 @@ def _create_intake_item_from_csv_row(row: Dict[str, str], seen_in_batch: Optiona
     tag_number = (row.get('タグ') or row.get('タグ番号') or row.get('tag_number') or '').strip()
     intake_date_str = (row.get('預り日') or row.get('預かり日') or row.get('intake_date') or '').strip()
     customer_name = (row.get('顧客名') or row.get('customer_name') or '').strip()
+    customer_code = (row.get('顧客ｺｰﾄﾞ') or row.get('customer_code') or '').strip() or None
     product_name = (row.get('商品名') or row.get('product_name') or '').strip()
     amount_str = (row.get('売価') or row.get('金額') or row.get('amount') or '').strip()
     
@@ -240,6 +241,7 @@ def _create_intake_item_from_csv_row(row: Dict[str, str], seen_in_batch: Optiona
         tag_number=tag_number,
         intake_date=intake_date,
         customer_name=customer_name,
+        customer_code=customer_code,
         product_name=product_name,
         amount=amount,
         status_id=received_status.id if received_status else None,  # 初期状態を設定

@@ -7,7 +7,7 @@
 
 from factory_shipping.extensions import db
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import date, datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from factory_shipping.utils import now_jst
 
@@ -114,6 +114,12 @@ class ItemStatus(db.Model):
         return f'<ItemStatus {self.status_code}: {self.status_name}>'
 
 
+# 工場の業務（入荷一覧・出荷スキャン・状態変更・未出荷・遅れ品など）で扱う品目の預り日の下限。
+# これより前の品目は、kinglinesystem の会員利用履歴のために 2026-09 に取り込んだ過去分
+# （預り日 2021-01-04〜2025-09-30。intake/historical.py）で、業務の画面や処理には出さない。
+BUSINESS_MIN_INTAKE_DATE = date(2025, 10, 1)
+
+
 class IntakeItem(db.Model):
     """入荷データ（CSV取り込み元）= 商品テーブル
 
@@ -141,6 +147,7 @@ class IntakeItem(db.Model):
     # 商品・顧客情報
     product_name = db.Column(db.String(200), nullable=True)  # 商品名
     customer_name = db.Column(db.String(100), nullable=True)  # 顧客名
+    customer_code = db.Column(db.String(20), nullable=True)  # 顧客ｺｰﾄﾞ（12 桁）。索引は (customer_code, intake_date)
 
     # 金額
     amount = db.Column(db.Integer, nullable=True)  # 売価（税込、円単位）
@@ -182,12 +189,27 @@ class IntakeItem(db.Model):
     # 工場画面の手動の状態変更に出てしまうため。
     RETURNED_STATUS_CODE = 'returned_to_customer'
     RETURNED_STATUS_NAME = '返却済'
+    # 過去分（預り日が BUSINESS_MIN_INTAKE_DATE より前）で返却の記録が無い品目の状態。
+    # 何年も前の品物を「入荷」と出すと店頭で「まだ店にある」と誤解されるため。
+    # 返却済と同じく item_statuses には登録しない（表示用の状態）。
+    NO_RETURN_RECORD_STATUS_CODE = 'no_return_record'
+    NO_RETURN_RECORD_STATUS_NAME = '返却記録なし'
+
+    @classmethod
+    def in_business_scope(cls):
+        """業務の画面・処理で扱う品目の条件（過去分を除く）。query.filter() に渡す。"""
+        return cls.intake_date >= BUSINESS_MIN_INTAKE_DATE
 
     @property
     def display_status(self):
-        """画面・API に出す状態 (status_code, status_name)。未設定なら (None, None)。"""
+        """画面・API に出す状態 (status_code, status_name)。未設定なら (None, None)。
+
+        返却済 > 返却記録なし（過去分） > 工場側の状態 の順に決める。
+        """
         if self.returned_at is not None:
             return self.RETURNED_STATUS_CODE, self.RETURNED_STATUS_NAME
+        if self.intake_date is not None and self.intake_date < BUSINESS_MIN_INTAKE_DATE:
+            return self.NO_RETURN_RECORD_STATUS_CODE, self.NO_RETURN_RECORD_STATUS_NAME
         if self.status:
             return self.status.status_code, self.status.status_name
         return None, None

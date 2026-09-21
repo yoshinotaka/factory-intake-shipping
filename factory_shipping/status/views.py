@@ -27,9 +27,10 @@ def unshipped():
     """未出荷一覧（status_idがshipped以外）"""
     shipped_status = ItemStatus.query.filter_by(status_code='shipped').first()
     if shipped_status:
-        items = IntakeItem.query.filter(IntakeItem.status_id != shipped_status.id).order_by(IntakeItem.scheduled_date).all()
+        items = IntakeItem.query.filter(IntakeItem.status_id != shipped_status.id,
+                                        IntakeItem.in_business_scope()).order_by(IntakeItem.scheduled_date).all()
     else:
-        items = IntakeItem.query.order_by(IntakeItem.scheduled_date).all()
+        items = IntakeItem.query.filter(IntakeItem.in_business_scope()).order_by(IntakeItem.scheduled_date).all()
     return render_template('status/unshipped.html', items=items)
 
 
@@ -50,6 +51,8 @@ def delayed():
         query = IntakeItem.query.filter(IntakeItem.status_id != shipped_status.id)
     else:
         query = IntakeItem.query
+    # 過去分（2025-09 以前）は「出荷済以外」でも遅れ品ではないので出さない
+    query = query.filter(IntakeItem.in_business_scope())
 
     # 店舗で絞り込み（2桁の場合は4桁に変換）
     if selected_store:
@@ -105,6 +108,7 @@ def by_store(store_code):
     """店舗別ステータス"""
     from factory_shipping.models import Store
     store = Store.query.filter_by(store_code=store_code).first_or_404()
-    items = IntakeItem.query.filter_by(store_id=store.id).order_by(IntakeItem.scheduled_date.desc()).all()
+    items = IntakeItem.query.filter_by(store_id=store.id).filter(
+        IntakeItem.in_business_scope()).order_by(IntakeItem.scheduled_date.desc()).all()
 
     return render_template('status/by_store.html', store=store, items=items)

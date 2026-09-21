@@ -164,10 +164,17 @@ def _load_candidates(rows: List[ReturnRow]):
     cols = (IntakeItem.id, IntakeItem.store_code, IntakeItem.slip_number, IntakeItem.intake_date,
             IntakeItem.tag_number, IntakeItem.product_name, IntakeItem.returned_at)
 
+    # 伝票No は店舗をまたいで重複し、年が変われば同じ店舗でも再利用されるので、
+    # 店舗と預り日でも絞って読む（突き合わせのキーに両方入っているので結果は変わらない）。
+    # 2021 年からの過去分を取り込んだ後、伝票No だけでは 5〜7 倍の行を読むことになる。
     slips = sorted({r.slip_number for r in rows if r.slip_number})
+    slip_stores = sorted({r.store_code for r in rows if r.slip_number})
+    slip_dates = sorted({r.intake_date for r in rows if r.slip_number})
     for i in range(0, len(slips), _SLIP_CHUNK):
         chunk = slips[i:i + _SLIP_CHUNK]
-        for it in db.session.query(*cols).filter(IntakeItem.slip_number.in_(chunk)):
+        for it in db.session.query(*cols).filter(IntakeItem.slip_number.in_(chunk),
+                                                 IntakeItem.store_code.in_(slip_stores),
+                                                 IntakeItem.intake_date.in_(slip_dates)):
             current[it.id] = it.returned_at
             if it.tag_number:
                 tagged[(it.store_code, it.slip_number, it.intake_date, it.tag_number)].append(it.id)

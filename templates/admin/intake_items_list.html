@@ -83,6 +83,7 @@
                         <option value="{{ status.id }}" {% if request.args.get('status_id')|int == status.id %}selected{% endif %}>{{ status.status_name }}</option>
                         {% endfor %}
                         <option value="returned_to_customer" {% if request.args.get('status_id') == 'returned_to_customer' %}selected{% endif %}>返却済</option>
+                        <option value="no_return_record" {% if request.args.get('status_id') == 'no_return_record' %}selected{% endif %}>返却記録なし（2025-09 以前）</option>
                     </select>
                 </div>
                 <div class="col-md-2">

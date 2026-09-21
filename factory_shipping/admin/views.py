@@ -265,11 +265,14 @@ def intake_items_list():
     status_filter = request.args.get('status_id', '').strip()
     if status_filter == IntakeItem.RETURNED_STATUS_CODE:
         query = query.filter(IntakeItem.returned_at.isnot(None))
+    elif status_filter == IntakeItem.NO_RETURN_RECORD_STATUS_CODE:
+        query = query.filter(IntakeItem.returned_at.is_(None), ~IntakeItem.in_business_scope())
     elif status_filter:
         try:
             status_id = int(status_filter)
             query = query.filter(IntakeItem.status_id == status_id,
-                                 IntakeItem.returned_at.is_(None))
+                                 IntakeItem.returned_at.is_(None),
+                                 IntakeItem.in_business_scope())
         except ValueError:
             pass
 

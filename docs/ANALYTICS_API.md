@@ -200,6 +200,7 @@ const data = await res.json();
 | `store_code` | string | × | 店舗コード (例: `0002`) |
 | `intake_status` | string | × | 入荷区分 (`通常` / `工場請求中` / `完了済` 等) |
 | `customer_name` | string | × | 顧客名（完全一致） |
+| `customer_code` | string | × | 顧客コード（完全一致、12 桁。例 `006650650110`） |
 | `limit` | int | × | 1〜1000 (既定 100) |
 | `offset` | int | × | 既定 0 |
 
@@ -218,6 +219,7 @@ const data = await res.json();
       "tag_number": "00-898",
       "product_name": "Ｙシャツ",
       "customer_name": "山田 太郎",
+      "customer_code": "006650650110",
       "amount": 133,
       "quantity": 1,
       "intake_date": "2025-11-28",
@@ -244,6 +246,11 @@ const data = await res.json();
 > 工場システム（king-req）の請求と `intake_items` を突き合わせて反映している。
 > 2025-10-01 以降の過去の請求も反映済み（請求中 63 件、`入荷` → `出荷済` 506 件。返却済の品目は表示が変わらない）。
 
+> **2026-09-24 変更**: 預り日 2021-01-04〜2025-09-30 の過去分（約 150 万品目）を取り込んだ。
+> - 過去分で返却の記録が無い品目は `no_return_record` / `返却記録なし` を返す。
+> - 各品目に `customer_code`（顧客コード、12 桁）を追加した。`/intake-items` と `/customers/history` は `customer_code` で絞れる。
+> - `/customers/search` と `/stats/products` は、期間の指定が無いとき直近 1 年を集計する。
+
 **品目の状態 (`status_code` / `status_name`)**
 
 | `status_code` | `status_name` | 意味 |
@@ -256,16 +263,17 @@ const data = await res.json();
 | `trouble_resolved` | トラブル対応済 | |
 | `rewashing` | 再洗中 | |
 | `returned_to_customer` | 返却済 | **お客様に返却した**。`returned_at` が入っている品目 |
+| `no_return_record` | 返却記録なし | 預り日 2025-10-01 より前の過去分で、返却の記録（`returned_at`）が無い品目。返却済か、店に残っているかは分からない |
 
 - `returned_at` が入っている品目は、工場側の状態（入荷・出荷済など）に関係なく `returned_to_customer` / `返却済` を返す。多くの品物は工場の出荷スキャンを経ずに、`入荷` から直接 `返却済` になる。
-- `returned_at` が `null` の品目は、従来どおり工場側の状態を返す。
+- `returned_at` が `null` の品目は、預り日が 2025-10-01 より前なら `no_return_record` / `返却記録なし`、それ以外は従来どおり工場側の状態を返す。2025-10-01 以降の品目は、何日たっても `返却記録なし` にはならない。
 - 請求中・出荷済は、店舗の請求の状態が変わるたびに変わる（出荷済を取り消すと請求中に戻る）。請求の登録・出荷の操作の直後に反映し、取りこぼしは毎時 20 分に補正する。請求したときに入荷データがまだ無い品物（当日受付分）は、取り込まれた後の補正で請求中になる。
 - `returned_at` は返却日時（JST、`+09:00` 付き ISO 8601、分単位）。半蔵の売上台帳を返却日で検索した CSV（`uriage_daityo_henkyakubi_shitei<YYYY-MM-DD>.csv`）の「返却日時」列の値。
   - 毎朝 05:00 に、前日までの直近 7 日分を取り込む。前日の返却は翌朝 05:00 以降に反映される。
   - 同じ品物が 2 回返却されたときは、新しい返却日時になる。
   - 取消列が `-` 以外の行は返却済にしない。
   - タグが空の行（会員登録料・ﾏﾃﾞ 早期引取です 等）は、店舗・伝票No・預り日・商品名が一致する行を返却済にする。返却のときに追記されたメモ行（LINE使用の記録 等）は `intake_items` に無いので現れない。
-  - 過去分は 2025-10-01（`intake_items` の最古の預り日）以降の返却を反映済み。
+  - 過去分は 2021 年以降の返却 CSV をすべて反映済み。返却 CSV に無い品目は、預り日 CSV の「返却日時」列の値で補っている（返却 CSV の値があればそちらを優先）。
 
 ---
 
@@ -279,7 +287,7 @@ const data = await res.json();
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
 | `q` | string | ✓ | 検索文字列（1〜100 文字、部分一致）。`%` と `_` はワイルドカードではなく文字として扱う |
-| `from_date` | date | × | 集計期間下限 |
+| `from_date` | date | × | 集計期間下限。`from_date` も `to_date` も無いときは今日の 365 日前 |
 | `to_date` | date | × | 集計期間上限 |
 | `store_code` | string | × | 店舗フィルタ |
 | `limit` | int | × | 1〜1000 (既定 100) |
@@ -376,12 +384,14 @@ const data = await res.json();
 
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `customer_name` | string | ✓ | 顧客名（完全一致） |
-| `from_date` / `to_date` | date | × | 預り日範囲 |
+| `customer_name` | string | △ | 顧客名（完全一致） |
+| `customer_code` | string | △ | 顧客コード（完全一致、12 桁）。`customer_name` とどちらか一方は必須。両方あれば両方で絞る |
+| `from_date` / `to_date` | date | × | 預り日範囲。無ければ全期間（2021-01〜。索引で引くので全期間でも速い） |
 | `store_code` | string | × | 店舗フィルタ |
 | `limit` / `offset` | int | × | ページネーション |
 
 **レスポンス**: `intake-items` と同形式（`status_code` / `status_name` / `returned_at` の意味も同じ）。
+先頭の `customer_name` / `customer_code` には、指定した値（指定しなかった方は `null`）を返す。
 
 ---
 
@@ -420,7 +430,7 @@ const data = await res.json();
 
 | 名前 | 型 | 必須 | 説明 |
 |---|---|---|---|
-| `from_date` / `to_date` | date | × | 集計期間 |
+| `from_date` / `to_date` | date | × | 集計期間。どちらも無いときは直近 1 年（今日の 365 日前から） |
 | `store_code` | string | × | 店舗フィルタ |
 | `limit` | int | × | 1〜500 (既定 50) |
 
@@ -560,7 +570,7 @@ curl -sS -H "$HDR_AUTH" -H "$HDR_ORIGIN" \
 ## 10. 既知の制限事項
 
 - **`intake_date`（預り日）の定義**: 半蔵（ASTEMPO）の売上台帳ログの `預り日` 列そのもの。店舗で受付した日であり、工場への入荷日でも取り込み実行日でもない。売上台帳ログを「預り日 = 当日」の条件で毎晩 22:30 に出力し、22:35 に取り込むため、通常は `imported_at` の日付と一致する（後日の再取得分は一致しない）。
-- **取消伝票は含まれない**: 売上台帳ログは「取消表示＝非表示」で出力している。店舗で取消された伝票は API に存在せず、伝票No が欠番になる。受付後に取消して別の日に打ち直された場合、API には打ち直し後の預り日の伝票だけが入る。
+- **取消伝票は含まれない**: 売上台帳ログは「取消表示＝非表示」で出力している（過去分は「表示」で出力された CSV から、取消の行を除いて取り込んだ）。店舗で取消された伝票は API に存在せず、伝票No が欠番になる。受付後に取消して別の日に打ち直された場合、API には打ち直し後の預り日の伝票だけが入る。
 - **定休日**: 毎週木曜は全店定休でデータが無い。火曜などの店舗別定休は `store_closed_days` マスタを参照。営業日なのにデータが無い日は `journal_download_notes` を参照。
 - **氏名の照合**: `customer_name` の完全一致・部分一致・グループ化は DB の照合順序 `utf8mb4_unicode_ci` に従う。
   - 同一視されるもの: 全角スペースと半角スペース、末尾の空白の有無、ひらがなとカタカナ、半角カナと全角カナ、英数字の全角/半角・大文字/小文字
@@ -572,7 +582,7 @@ curl -sS -H "$HDR_AUTH" -H "$HDR_ORIGIN" \
 - **量集計の精度**: `total_amount` は税込売価の単純合計。返品・修正の概念は未反映。
 - **タイムゾーン**: `imported_at` などの datetime は JST (`+09:00`) または UTC 表記が混在し得る。`returned_at` は常に `+09:00` 付き。日付フィールド (`intake_date` 等) は JST 基準の純粋な date 型。
 - **返却済にならない品目**: 返却 CSV に載っていても、`intake_items` に伝票ごと無い品目（預り日 CSV の取得後に、前日以前の預り日で登録された伝票など）は API に現れない。取り込み時に件数と内容を `/var/log/factory-shipping/import-returns.log` に記録している。
-- **データ範囲**: 売上台帳ログから取り込まれた範囲のみ。半蔵側のリトライ失敗日は `journal_download_notes` を参照。
+- **データ範囲**: 預り日 2021-01-04 以降。2025-09-30 までは 2026-09 に一括で取り込んだ過去分、2025-10-01 以降は毎晩の取り込み。売上台帳ログから取り込まれた範囲のみ。半蔵側のリトライ失敗日は `journal_download_notes` を参照。
 - **可用性**: factory-intake-shipping (gunicorn + nginx) の稼働に依存。冗長化なし。
 
 ---

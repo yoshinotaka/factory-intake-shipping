@@ -44,8 +44,9 @@ def scan():
     
     item = IntakeItem.query.filter(
         IntakeItem.item_code == scanned_code,
-        IntakeItem.status_id != shipped_status.id
-    ).first()
+        IntakeItem.status_id != shipped_status.id,
+        IntakeItem.in_business_scope(),
+    ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).first()
 
     if not item:
         return jsonify({'error': '該当する入荷データが見つかりません'}), 404
@@ -335,9 +336,10 @@ def process_barcode_shipment_for_screen(scanned_code: str, operator_id: int = No
             and_(
                 IntakeItem.store_id == store.id,
                 IntakeItem.tag_number == pattern,
-                IntakeItem.status_id != shipped_status.id
+                IntakeItem.status_id != shipped_status.id,
+                IntakeItem.in_business_scope(),  # 過去分（2025-09 以前）は出荷しない
             )
-        ).first()
+        ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).first()
         if intake_item:
             logger.debug(f"タグ番号マッチ: 検索パターン={pattern}, DB値={intake_item.tag_number}")
             break
@@ -353,9 +355,10 @@ def process_barcode_shipment_for_screen(scanned_code: str, operator_id: int = No
                 and_(
                     IntakeItem.store_id == store.id,
                     IntakeItem.tag_number == pattern,
-                    IntakeItem.status_id == shipped_status.id
+                    IntakeItem.status_id == shipped_status.id,
+                    IntakeItem.in_business_scope(),
                 )
-            ).first()
+            ).order_by(IntakeItem.intake_date.desc(), IntakeItem.id.desc()).first()
             if shipped_item:
                 break
 
